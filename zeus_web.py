@@ -5,54 +5,42 @@ import os
 import urllib.request
 import json
 import ssl
-import re
+import gdown  # 💡 巨大データ突破用の強力なツール
 
 # --- 究極クラウド設定 ---
-# 💡 浅井さんのGoogleドライブから巨大データを安全に引っ張ってくる設定
 DRIVE_FILE_ID = "1tWVFol3GauZdrUIJ_w_OKM9AZSQLbswG"
 CSV_FILE = "ZEUS_10Years_Master_FINAL_PERFECT.csv"
-API_KEY = "AIzaSyCS9Urb8-_HSuVtM5iHbBP-r3pPT5mEg_g"
 
 st.set_page_config(page_title="12TUELVUN", page_icon="⚡", layout="centered")
 
-# --- 巨大データ自動同期ロジック ---
+# 💡 サイドバーにAIキー入力欄を設置（公開倉庫に書くとGoogleに消されるため）
+with st.sidebar:
+    st.markdown("### 🔑 システム設定")
+    st.markdown("セキュリティ保護のため、AIキーはここに入力してください。")
+    API_KEY = st.text_input("Gemini APIキー", type="password")
+
+# --- 巨大データ自動同期ロジック (gdownでウイルススキャンの壁を突破) ---
 def sync_database_from_cloud():
-    # すでにサーバー内にダウンロード済みの場合はスキップして即起動
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
         return True
         
-    with st.spinner("☁️ クラウドの特大データベース（541MB）と初回同期中...（数分かかる場合があります）"):
+    with st.spinner("☁️ クラウドの特大データベース（541MB）と同期中...（約1〜3分）"):
         try:
-            base_url = "https://docs.google.com/uc?export=download"
-            url = f"{base_url}&id={DRIVE_FILE_ID}"
+            file_url = f"https://drive.google.com/uc?id={DRIVE_FILE_ID}"
+            # fuzzy=True でGoogleドライブの警告画面を自動突破！
+            gdown.download(file_url, CSV_FILE, quiet=False, fuzzy=True)
             
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            
-            # 1回目：大容量ファイルのウイルススキャン警告画面（トークン）を突破する処理
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, context=ctx) as response:
-                html = response.read().decode('utf-8', errors='ignore')
-                match = re.search(r'confirm=([0-9A-Za-z_]+)', html)
-                if match:
-                    confirm_token = match.group(1)
-                    url = f"{base_url}&id={DRIVE_FILE_ID}&confirm={confirm_token}"
-            
-            # 2回目：1MBずつの細切れ（チャンク）で安全にダウンロードしてサーバーがフリーズするのを防ぐ
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, context=ctx) as response, open(CSV_FILE, 'wb') as out_file:
-                while True:
-                    chunk = response.read(1024 * 1024)  # 1MBずつ読み込み
-                    if not chunk:
-                        break
-                    out_file.write(chunk)
-            return True
+            if os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
+                return True
+            else:
+                st.error("❌ ダウンロードが不完全です。再読み込みしてください。")
+                # 失敗したゴミファイルを消す
+                os.remove(CSV_FILE)
+                return False
         except Exception as e:
-            st.error(f"❌ クラウドデータの同期に失敗しました。共有設定が『リンクを知っている全員』になっているかご確認ください。 [エラー詳細]: {e}")
+            st.error(f"❌ クラウドデータの同期に失敗しました。[エラー詳細]: {e}")
             return False
 
-# クラウド同期を実行
 database_ready = sync_database_from_cloud()
 
 # --- マスターデータ ---
@@ -184,7 +172,6 @@ with col2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# クラウドとの同期が完了していない場合はボタンを無効化
 if not database_ready:
     st.error("⚠️ データベースの同期が完了するまで、解析は実行できません。")
 else:
@@ -447,7 +434,6 @@ else:
                         data = {"contents": [{"parts": [{"text": prompt}]}]}
                         req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
                         
-                        # 💡 ここでAI用の通信許可証を正しく再発行します！
                         ctx_ai = ssl.create_default_context()
                         ctx_ai.check_hostname = False
                         ctx_ai.verify_mode = ssl.CERT_NONE
@@ -456,7 +442,9 @@ else:
                             result = json.loads(response.read().decode('utf-8'))
                             ai_story = result['candidates'][0]['content']['parts'][0]['text']
                     except Exception as e:
-                        ai_story = f"⚠️ 【AI通信エラー】\nAIの接続に失敗しました。（※データ解析は正常に完了しています）\n\n[詳細]: {str(e)}"
+                        ai_story = f"⚠️ 【AI通信エラー】\nAPIキーが間違っているか、通信に失敗しました。\n\n[詳細]: {str(e)}"
+                else:
+                    ai_story = "⚠️ 【AI待機中】\n画面左側のメニュー（スマホの場合は左上の「＞」マーク）から、AI用のAPIキーを入力してください。"
 
             except Exception as e:
                 st.error(f"データ解析中にエラーが発生しました: {str(e)}")
