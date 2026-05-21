@@ -11,7 +11,8 @@ import re
 
 # --- 究極クラウド設定 ---
 DRIVE_FILE_ID = "1tWVFol3GauZdrUIJ_w_OKM9AZSQLbswG"
-CSV_FILE = "ZEUS_10Years_Master_FINAL_PERFECT.csv"
+# 💡 名前を変更！これで古い記憶を捨てさせ、絶対に最新データをダウンロードさせます！
+CSV_FILE = "ZEUS_10Years_Master_FORCE_FRESH.csv"
 
 st.set_page_config(page_title="12TUELVUN", page_icon="⚡", layout="centered")
 
@@ -24,7 +25,7 @@ with st.sidebar:
 def sync_database_from_cloud():
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
         return True
-    with st.spinner("☁️ クラウドの特大データベース（541MB）と同期中...（約1〜3分）"):
+    with st.spinner("☁️ クラウドから最新の特大データ（541MB）を強制ダウンロード中...（約1〜3分）"):
         try:
             gdown.download(id=DRIVE_FILE_ID, output=CSV_FILE, quiet=False)
             if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
@@ -39,7 +40,7 @@ def sync_database_from_cloud():
 
 database_ready = sync_database_from_cloud()
 
-# 💡 テストで大成功した最強の抽出ロジックを直輸入！
+# 強制データクレンジング
 def get_boat_and_rank(row):
     rank_raw = str(row.get('着順', '')).translate(str.maketrans('１２３４５６７８９０', '1234567890'))
     boat_raw = str(row.get('艇番', '')).translate(str.maketrans('１２３４５６', '123456'))
@@ -182,7 +183,7 @@ else:
 
         with st.spinner("🔍 過去10年・339万件のデータを完璧にグループ化して解析中..."):
             try:
-                # 💡【重要修正】バラバラのCSVデータを、レースIDごとに完璧にグループ化する（PC版のやり方を移植）
+                # 💡 PC版の重戦車ロジック：レースごとに完璧に整頓する
                 races_in_memory = defaultdict(list)
                 target_venue_clean = venue.replace(" ", "").replace("　", "")
 
@@ -192,17 +193,15 @@ else:
                         total_rows_read += 1
                         file_v = str(row.get("レース場", "")).replace(" ", "").replace("　", "")
                         
-                        # 指定したレース場のデータだけをメモリに引き上げる
                         if file_v == target_venue_clean:
                             r_id = f"{str(row.get('日付', '')).strip()}_{str(row.get('レース番号', '')).strip()}"
                             races_in_memory[r_id].append(row)
 
-                # メモリに完璧に展開された「レースごと」の塊を解析する
+                # 整頓されたレースの塊ごとに判定
                 for r_id, rows in races_in_memory.items():
                     if not rows: continue
                     first_row = rows[0]
                     
-                    # 1. ベースライン集計
                     for r in rows:
                         b_num, is_win = get_boat_and_rank(r)
                         if b_num in venue_baseline:
@@ -210,7 +209,6 @@ else:
                             if is_win:
                                 venue_baseline[b_num]["wins"] += 1
                     
-                    # 2. 環境データの抽出
                     temp = safe_float(first_row.get("気温"))
                     w_temp = safe_float(first_row.get("水温"))
                     press = safe_float(first_row.get("気圧"))
@@ -232,7 +230,6 @@ else:
                     times.sort(key=lambda x: x[1])
                     fastest_boat = times[0][0] if times else None
 
-                    # 3. マッチング判定
                     is_broad_match = True
                     if "指定なし" not in wind_dir_raw:
                         translated_dir = get_wind_type(venue, raw_wind_direction)
@@ -347,6 +344,7 @@ else:
                 ai_wave = wave_raw.split(' ')[0]
                 ai_tide = tide_raw.split(' ')[0]
 
+                # 💡 削ってしまった完全版の解説文を大復活！
                 profiling_html = []
                 def add_prof(title, desc, color="#d1d5db"):
                     profiling_html.append(f"<div style='margin-bottom: 8px;'><strong style='color:#fcd34d;'>{title}</strong><br><span style='color:{color};'>└ {desc}</span></div>")
@@ -354,11 +352,63 @@ else:
                 add_prof(f"📍 レース場 【{venue}】", VENUE_PROFILE.get(venue, ""))
                 
                 if "指定なし" not in time_raw:
-                    if "モーニング" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 セオリー通りイン逃げが決まりやすいベース条件となります。")
-                    elif "デイ" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 波乱の引き金が引かれやすい環境です。")
-                    elif "サンセット" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"⚠️ 【{ai_time}の魔境】 予期せぬ波乱が多発する魔の時間帯です。", "#ef4444")
-                    elif "ナイター" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 強烈なスピード戦が展開されます。", "#22d3ee")
-                else: add_prof(f"⌚ 時間帯 【{time_raw}】", "全時間帯を対象に分析しています。")
+                    if "モーニング" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 気温が上がり切る前の特有の静けさが支配する水面です。モーターの体積効率が良く、セオリー通りイン逃げが決まりやすいベース条件となります。")
+                    elif "デイ" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 気温と水温がピークに達し、モーターが最も『ダレる』過酷な時間帯です。スロー勢の出足が甘くなりやすく、波乱の引き金が引かれやすい環境です。")
+                    elif "サンセット" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"⚠️ 【{ai_time}の魔境】 強烈な西日が水面に乱反射し、大時計とスリットラインの視認性を極端に奪います。選手のスタート勘が狂い、予期せぬドカ遅れ（凹み）が多発する魔の時間帯です。", "#ef4444")
+                    elif "ナイター" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 日没とともに気温が急低下。冷えた空気を吸い込むことでモーターの体積効率が限界突破し、出足・行き足が復活します。インの信頼度が増すと同時に、強烈なスピード戦が展開されます。", "#22d3ee")
+                else: add_prof(f"⌚ 時間帯 【{time_raw}】", "時間帯による条件の絞り込みを行わず、全時間帯を対象に分析しています。")
+
+                if "指定なし" not in water_qual_raw:
+                    if "海水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 塩分による浮力が大きく、体重の重い選手でも不利になりにくい環境です。水質が柔らかいため、スピードに乗った思い切った全速ターンが決まりやすくなります。")
+                    elif "淡水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 浮力が小さいため体重差がモロに出ます。水質が硬く艇が跳ねやすいため、モーターの『乗り心地』や『回り足』の差が露骨に結果を左右するシビアな水面です。")
+                    elif "汽水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 海水と淡水が混ざり合い、時間帯や潮の満ち引きによって水面の硬さや浮力が変化する、極めて難解でテクニカルな水面です。")
+                else: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", "水質による条件の絞り込みを行わず、全水質を対象に分析しています。")
+
+                is_tidal = venue in ["江戸川", "平和島", "浜名湖", "常滑", "鳴門", "丸亀", "児島", "宮島", "徳山", "下関", "若松", "福岡", "大村"]
+                if not is_tidal: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", "【影響なし】 このレース場は淡水（プール等）のため、潮の干満による水面への直接的な影響はありません。風や気圧のデータを最優先に展開を構築します。", "#94a3b8")
+                else:
+                    if "指定なし" not in tide_raw:
+                        if "満潮" in tide_raw: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", f"【{ai_tide}の影響】 水位が上がり、うねりや波が発生しやすい不安定な水面になります。ターンがバタつくため全速のまくりが外に流れやすく、インの『逃げ』や内を差す『差し』が圧倒的に有利な条件です。")
+                        elif "干潮" in tide_raw: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", f"【{ai_tide}の影響】 水位が下がり、水面がフラットで穏やかになります。スピードに乗った全速ターンがバシバシ決まるため、センター〜アウトからの強烈な『まくり』が台頭する絶好の条件です。", "#ef4444")
+                        else: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", f"【{ai_tide}の影響】 標準的な潮位であり、潮による極端な有利不利は発生しにくい水面状況です。")
+                    else: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", "潮位による条件の絞り込みを行わず、全潮位を対象に分析しています。")
+
+                if "指定なし" not in season_raw:
+                    if "25" in season_raw or "30" in season_raw: add_prof(f"🌡️ 気温 【{season_raw}】", f"【{ai_season}の環境】 空気体積が膨張し密度が低下。モーターの燃焼効率が落ち、ダッシュ勢の行き足がつきにくい過酷な条件です。")
+                    elif "15" in season_raw or "20" in season_raw: add_prof(f"🌡️ 気温 【{season_raw}】", f"【{ai_season}の環境】 モーター調整がしやすく、選手間の機力差がそのまま結果に直結しやすいフラットなベース条件です。")
+                    else: add_prof(f"🌡️ 気温 【{season_raw}】", f"【{ai_season}の環境】 空気が収縮して密度が上がり、燃焼効率が最大化。全艇のパワーが底上げされスピード戦になりやすい条件です。")
+                else: add_prof(f"🌡️ 気温 【{season_raw}】", "気温による条件の絞り込みを行わず、すべての季節を対象に分析しています。")
+
+                if "指定なし" not in water_temp_raw:
+                    if "25" in water_temp_raw or "30" in water_temp_raw: add_prof(f"🧊 水温 【{water_temp_raw}】", f"【{ai_w_temp}の熱力学】 水温が高く、モーターの冷却効率が著しく低下します。エンジンの体積効率が下がり『ダレる』ため、特に助走の短いインコースの出足に深刻なダメージを与えます。")
+                    elif "15" in water_temp_raw or "20" in water_temp_raw: add_prof(f"🧊 水温 【{water_temp_raw}】", f"【{ai_w_temp}の熱力学】 水温として標準的であり、モーターの冷却効率に極端な偏りは出ません。機力の素性が素直に反映されます。")
+                    else: add_prof(f"🧊 水温 【{water_temp_raw}】", f"【{ai_w_temp}の熱力学】 水が冷たく、モーターがキンキンに冷却されます。シリンダー内の体積効率が限界まで高まり、出足から行き足にかけてのパワーが底上げされるため、内枠が強力なアドバンテージを得ます。")
+                else: add_prof(f"🧊 水温 【{water_temp_raw}】", "水温による条件の絞り込みを行わず、全水温を対象に分析しています。")
+
+                if "指定なし" not in press_raw:
+                    if "1000" in press_raw or "1005" in press_raw: add_prof(f"☁️ 気圧 【{press_raw}】", f"【{ai_press}の環境】 キャブレターの酸素吸入量が物理的に低下。スロットルを握った瞬間の『初速（出足）』がスカスカになる波乱水面です。")
+                    elif "1015" in press_raw or "1020" in press_raw: add_prof(f"☁️ 気圧 【{press_raw}】", f"【{ai_press}の環境】 燃焼爆発力が最大化し、出足から行き足にかけてのパンチ力が桁違いになります。イン逃げが鉄板化しやすい条件です。")
+                    else: add_prof(f"☁️ 気圧 【{press_raw}】", f"【{ai_press}の環境】 キャブレターへの吸気効率に極端な偏りはなく、モーター本来のパワー勝負になります。")
+                else: add_prof(f"☁️ 気圧 【{press_raw}】", "気圧による条件の絞り込みを行わず、全気圧を対象に分析しています。")
+
+                if "指定なし" not in humidity_raw:
+                    if "60" in humidity_raw or "75" in humidity_raw: add_prof(f"💧 湿度 【{humidity_raw}】", f"【{ai_humid}の環境】 水分が酸素スペースを奪うため燃焼パワーが減衰。引き波を超えるパワーが求められるスロー勢には深刻なマイナス材料です。")
+                    elif "30" in humidity_raw or "45" in humidity_raw: add_prof(f"💧 湿度 【{humidity_raw}】", f"【{ai_humid}の環境】 乾いた空気を吸い込むことで燃焼効率が上がり、インコースの初動加速を強烈に後押しする条件です。")
+                    else: add_prof(f"💧 湿度 【{humidity_raw}】", f"【{ai_humid}の環境】 湿気によるパワー減衰は少なく、モーターの素性が素直に出やすい環境です。")
+                else: add_prof(f"💧 湿度 【{humidity_raw}】", "湿度による条件の絞り込みを行わず、全湿度を対象に分析しています。")
+
+                if "向かい風" in wind_dir_raw: add_prof(f"💨 風向・風速 【{wind_dir_raw} / {wind_spd_raw}】", f"⚠️ 【{ai_wind_spd}の向かい風】 スタートラインに向かって吹く風がスローの初速を殺します。逆に助走を取ったダッシュ勢はトップスピードでスリットを通過するため、強烈な『まくり』のベクトルが働きます。", "#ef4444")
+                elif "追い風" in wind_dir_raw: add_prof(f"💨 風向・風速 【{wind_dir_raw} / {wind_spd_raw}】", f"⚠️ 【{ai_wind_spd}の追い風】 インコースが加速しやすい反面、第1ターンマークでブレーキが利かず外に膨らむ物理法則が働きます。その懐を突く『差し』『まくり差し』に警戒が必要です。", "#fcd34d")
+                else: add_prof(f"💨 風向・風速 【{wind_dir_raw} / {wind_spd_raw}】", f"【{ai_wind_spd}の風】 風の影響は限定的であり、純粋なモーター機力とコースのセオリー勝負になります。")
+
+                if "指定なし" not in wave_raw:
+                    if "4" in wave_raw or "5" in wave_raw or "6" in wave_raw: add_prof(f"🌊 波高 【{wave_raw}】", f"【{ai_wave}の難水面】 艇がバウンドしやすく、全速ターンは弾かれて空転を起こしやすくなります。引き波を縫う『差し』が台頭します。", "#fcd34d")
+                    elif "2" in wave_raw or "3" in wave_raw: add_prof(f"🌊 波高 【{wave_raw}】", f"【{ai_wave}の水面】 少しバタつくためターンの精度が問われます。荒れ水面を苦にしない選手の技量とモーターの『乗り心地』がモロに出ます。")
+                    else: add_prof(f"🌊 波高 【{wave_raw}】", f"【{ai_wave}のベタ水面】 水面抵抗が極小。スピードに乗った全速ターンが決まりやすく、機力上位のまくり・まくり差しが美しく決まります。")
+
+                if "指定なし" not in exhibit_raw:
+                    keyman = exhibit_raw.split('が')[0]
+                    add_prof(f"⏱️ 展示トップ 【{exhibit_raw}】", f"上記の複雑な環境下で、【{keyman}】が最速の行き足を叩き出しています。この艇の仕掛けが最大のトリガーです。", "#22d3ee")
 
                 ai_story = "【AIドラマ生成中...】"
                 if API_KEY:
@@ -449,9 +499,3 @@ else:
                     kimarite_sorted = sorted(s["kimarite"].items(), key=lambda x: x[1], reverse=True)[:2]
                     k_text = " / ".join([f"{k}({round(c/s['wins']*100)}%)" for k, c in kimarite_sorted])
                     st.caption(f"└─ 特異決まり手: {k_text}")
-
-        # 💡 万が一またおかしくなった時の緊急デバッグ
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        with st.expander("🛠️ 【緊急デバッグ】もし勝率がおかしい場合はここをタップしてください"):
-            st.write("▼ 【平常時】の裏側集計データ")
-            st.json(venue_baseline)
