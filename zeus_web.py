@@ -41,11 +41,12 @@ def sync_database_from_cloud():
 
 database_ready = sync_database_from_cloud()
 
-# --- 💡 強制データクレンジング関数（どんな汚れたCSVデータも正確に読み取る） ---
+# --- 💡 強制データクレンジング関数（「01」→「1」に完全対応！） ---
 def clean_boat_num(val):
     if not val: return None
-    v = str(val).strip().translate(str.maketrans('１２３４５６', '123456'))
+    v = str(val).strip().translate(str.maketrans('１２３４５６７８９０', '1234567890'))
     if v.endswith('.0'): v = v[:-2]
+    v = v.lstrip('0') # 💡 ここで「02」の頭の「0」を削り落として「2」にする！
     return v if v in ["1", "2", "3", "4", "5", "6"] else None
 
 def is_winning_rank(val):
