@@ -8,10 +8,10 @@ import json
 import ssl
 import gdown
 import re
+import glob  # 💡 ゴミデータ掃除用のツールを追加
 
 st.set_page_config(page_title="12TUELVUN", page_icon="⚡", layout="centered")
 
-# 💡 サイドバーに「Googleドライブリンク」の入力欄を追加！
 with st.sidebar:
     st.markdown("### 🔑 システム設定")
     API_KEY = st.text_input("Gemini APIキー", type="password").strip()
@@ -20,7 +20,6 @@ with st.sidebar:
     st.markdown("過去10年分のフルデータが入った、Googleドライブの『共有リンク』をここに貼り付けてください。")
     DRIVE_URL = st.text_input("Googleドライブ共有リンク").strip()
 
-# リンクから自動でIDを抜き出す魔法の関数
 def extract_drive_id(url):
     if not url: return None
     if "id=" in url: return url.split("id=")[1].split("&")[0]
@@ -28,13 +27,22 @@ def extract_drive_id(url):
     return url
 
 DRIVE_FILE_ID = extract_drive_id(DRIVE_URL)
-CSV_FILE = f"ZEUS_DATA_{DRIVE_FILE_ID}.csv" if DRIVE_FILE_ID else None
+# 💡 名前を完全に新しくして、アプリに「これは初めて見るファイルだ！」と錯覚させ、強制ダウンロードさせます！
+CSV_FILE = f"ZEUS_DATA_ULTIMATE_FRESH_{DRIVE_FILE_ID}.csv" if DRIVE_FILE_ID else None
 
 def sync_database_from_cloud():
     if not DRIVE_FILE_ID: return False
+    
+    # 💡 サーバーに残っている古いゴミデータを自動で掃除する
+    for old_file in glob.glob("ZEUS_DATA_*.csv"):
+        if old_file != CSV_FILE:
+            try: os.remove(old_file)
+            except: pass
+
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
         return True
-    with st.spinner("☁️ リンク先の特大データを強制ダウンロード中...（約1〜3分）"):
+        
+    with st.spinner("☁️ 古い記憶を消去し、最新の特大データを強制ダウンロード中...（約1〜3分）"):
         try:
             gdown.download(id=DRIVE_FILE_ID, output=CSV_FILE, quiet=False)
             if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
@@ -44,10 +52,11 @@ def sync_database_from_cloud():
                 if os.path.exists(CSV_FILE): os.remove(CSV_FILE)
                 return False
         except Exception as e:
-            st.error(f"❌ データの取得に失敗しました。リンクの権限が「リンクを知っている全員」になっているか確認してください。\n[詳細]: {e}")
+            st.error(f"❌ データの取得に失敗しました。\n[詳細]: {e}")
             return False
 
-# ここから下は今までと同じ最強の解析ロジックです
+database_ready = sync_database_from_cloud()
+
 def get_boat_and_rank(row):
     rank_raw = str(row.get('着順', '')).translate(str.maketrans('１２３４５６７８９０', '1234567890'))
     boat_raw = str(row.get('艇番', '')).translate(str.maketrans('１２３４５６', '123456'))
@@ -57,6 +66,7 @@ def get_boat_and_rank(row):
     is_win = (rank_match and int(rank_match.group(0)) == 1)
     return b, is_win
 
+# --- マスターデータ ---
 VENUE_WATER_MAP = {
     "桐生": "淡水 (浮力小/体重差大/硬い)", "戸田": "淡水 (浮力小/体重差大/硬い)", "江戸川": "汽水 (混合/時間帯で変化)", "平和島": "海水 (浮力大/体重差減/柔らかい)", 
     "多摩川": "淡水 (浮力小/体重差大/硬い)", "浜名湖": "汽水 (混合/時間帯で変化)", "蒲郡": "汽水 (混合/時間帯で変化)", "常滑": "海水 (浮力大/体重差減/柔らかい)", 
@@ -317,6 +327,7 @@ else:
                 ai_wave = wave_raw.split(' ')[0]
                 ai_tide = tide_raw.split(' ')[0]
 
+                # 💡【復活】詳しい環境解説文
                 profiling_html = []
                 def add_prof(title, desc, color="#d1d5db"):
                     profiling_html.append(f"<div style='margin-bottom: 8px;'><strong style='color:#fcd34d;'>{title}</strong><br><span style='color:{color};'>└ {desc}</span></div>")
@@ -388,7 +399,20 @@ else:
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
                         prompt = f"""
                         あなたは水面の「事実」だけを刻む独自の予測システム【12TUELVUN】のコアAIです。
-                        レース場: {venue}, 時間帯: 【{ai_time}】, 気温: 【{ai_season}】, 水温: 【{ai_w_temp}】, 水質: 【{ai_w_qual}】, 気圧: 【{ai_press}】, 湿度: 【{ai_humid}】, 風向: 【{wind_dir_raw}】, 風速: 【{ai_wind_spd}】, 波高: 【{ai_wave}】, 潮回り: 【{ai_tide}】, 展示トップ: {exhibit_raw}, 頻発する決まり手: {k_str}
+                        レース場: {venue}
+                        時間帯: 【{ai_time}】
+                        気温: 【{ai_season}】
+                        水温: 【{ai_w_temp}】
+                        水質: 【{ai_w_qual}】
+                        気圧: 【{ai_press}】
+                        湿度: 【{ai_humid}】
+                        風向: 【{wind_dir_raw}】
+                        風速: 【{ai_wind_spd}】
+                        波高: 【{ai_wave}】
+                        潮回り: 【{ai_tide}】
+                        展示トップ: {exhibit_raw}
+                        頻発する決まり手: {k_str}
+
                         1. 冒頭は「今、ひとりでこの分析画面を見つめているあなたなら、もう気づいているはずだ。毎日ただ単純な予想に頼り、思考停止で負け続ける日々はもう終わりにしよう。12TUELVUNは過去10年以上の膨大なデータと物理法則から、プロの環境認識を完全に代行する。」で始めること。
                         2. 指定された時間帯、水温、水質、気圧、風速、潮回りの数値を必ず文章内で使って解説。
                         3. お金や賭けの用語は一切使わず、純粋な水面のドラマとして500文字程度で出力。
@@ -396,16 +420,20 @@ else:
                         """
                         data = {"contents": [{"parts": [{"text": prompt}]}]}
                         req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
+                        
                         ctx_ai = ssl.create_default_context()
                         ctx_ai.check_hostname = False
                         ctx_ai.verify_mode = ssl.CERT_NONE
+                        
                         with urllib.request.urlopen(req, context=ctx_ai) as response:
                             result = json.loads(response.read().decode('utf-8'))
                             ai_story = result['candidates'][0]['content']['parts'][0]['text']
+                            
                     except urllib.error.HTTPError as e:
-                        ai_story = f"⚠️ 【AI通信エラー】\nGoogleのAIが混み合っているか、拒否されました。\n\n[詳細]:\n{e.read().decode('utf-8')}"
+                        err_body = e.read().decode('utf-8')
+                        ai_story = f"⚠️ 【AI通信エラー】\nGoogleのAIが混み合っているか、拒否されました。\n\n[詳細]:\n{err_body}"
                     except Exception as e:
-                        ai_story = f"⚠️ 【AI通信エラー】\n通信に失敗しました。\n[詳細]: {str(e)}"
+                        ai_story = f"⚠️ 【AI通信エラー】\n通信に失敗しました。\n\n[詳細]: {str(e)}"
                 else:
                     ai_story = "⚠️ 【AI待機中】\n画面左側のメニュー（スマホの場合は左上の「＞」マーク）から、AI用のAPIキーを入力してください。"
 
@@ -454,3 +482,8 @@ else:
                     kimarite_sorted = sorted(s["kimarite"].items(), key=lambda x: x[1], reverse=True)[:2]
                     k_text = " / ".join([f"{k}({round(c/s['wins']*100)}%)" for k, c in kimarite_sorted])
                     st.caption(f"└─ 特異決まり手: {k_text}")
+
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        with st.expander("🛠️ 【緊急デバッグ】もし勝率がおかしい場合はここをタップしてください"):
+            st.write("▼ 【平常時】の裏側集計データ")
+            st.json(venue_baseline)
