@@ -9,38 +9,45 @@ import ssl
 import gdown
 import re
 
-# --- 究極クラウド設定 ---
-DRIVE_FILE_ID = "1tWVFol3GauZdrUIJ_w_OKM9AZSQLbswG"
-# 💡 名前を変更！これで古い記憶を捨てさせ、絶対に最新データをダウンロードさせます！
-CSV_FILE = "ZEUS_10Years_Master_FORCE_FRESH.csv"
-
 st.set_page_config(page_title="12TUELVUN", page_icon="⚡", layout="centered")
 
+# 💡 サイドバーに「Googleドライブリンク」の入力欄を追加！
 with st.sidebar:
     st.markdown("### 🔑 システム設定")
-    st.markdown("セキュリティ保護のため、AIキーはここに入力してください。")
     API_KEY = st.text_input("Gemini APIキー", type="password").strip()
+    
+    st.markdown("### 📁 データベース接続")
+    st.markdown("過去10年分のフルデータが入った、Googleドライブの『共有リンク』をここに貼り付けてください。")
+    DRIVE_URL = st.text_input("Googleドライブ共有リンク").strip()
 
-# --- 巨大データ自動同期ロジック ---
+# リンクから自動でIDを抜き出す魔法の関数
+def extract_drive_id(url):
+    if not url: return None
+    if "id=" in url: return url.split("id=")[1].split("&")[0]
+    if "/d/" in url: return url.split("/d/")[1].split("/")[0]
+    return url
+
+DRIVE_FILE_ID = extract_drive_id(DRIVE_URL)
+CSV_FILE = f"ZEUS_DATA_{DRIVE_FILE_ID}.csv" if DRIVE_FILE_ID else None
+
 def sync_database_from_cloud():
+    if not DRIVE_FILE_ID: return False
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
         return True
-    with st.spinner("☁️ クラウドから最新の特大データ（541MB）を強制ダウンロード中...（約1〜3分）"):
+    with st.spinner("☁️ リンク先の特大データを強制ダウンロード中...（約1〜3分）"):
         try:
             gdown.download(id=DRIVE_FILE_ID, output=CSV_FILE, quiet=False)
             if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
                 return True
             else:
-                st.error("❌ ダウンロードが不完全です。再読み込みしてください。")
+                st.error("❌ ダウンロードが不完全です。リンクが間違っているか、権限が「制限付き」になっています。")
                 if os.path.exists(CSV_FILE): os.remove(CSV_FILE)
                 return False
         except Exception as e:
-            st.error(f"❌ クラウドデータの同期に失敗しました。[エラー詳細]: {e}")
+            st.error(f"❌ データの取得に失敗しました。リンクの権限が「リンクを知っている全員」になっているか確認してください。\n[詳細]: {e}")
             return False
 
-database_ready = sync_database_from_cloud()
-
-# 強制データクレンジング
+# ここから下は今までと同じ最強の解析ロジックです
 def get_boat_and_rank(row):
     rank_raw = str(row.get('着順', '')).translate(str.maketrans('１２３４５６７８９０', '1234567890'))
     boat_raw = str(row.get('艇番', '')).translate(str.maketrans('１２３４５６', '123456'))
@@ -50,22 +57,14 @@ def get_boat_and_rank(row):
     is_win = (rank_match and int(rank_match.group(0)) == 1)
     return b, is_win
 
-# --- マスターデータ ---
 VENUE_WATER_MAP = {
-    "桐生": "淡水 (浮力小/体重差大/硬い)", "戸田": "淡水 (浮力小/体重差大/硬い)", 
-    "江戸川": "汽水 (混合/時間帯で変化)", "平和島": "海水 (浮力大/体重差減/柔らかい)", 
-    "多摩川": "淡水 (浮力小/体重差大/硬い)", "浜名湖": "汽水 (混合/時間帯で変化)", 
-    "蒲郡": "汽水 (混合/時間帯で変化)", "常滑": "海水 (浮力大/体重差減/柔らかい)", 
-    "津": "汽水 (混合/時間帯で変化)", "三国": "淡水 (浮力小/体重差大/硬い)", 
-    "びわこ": "淡水 (浮力小/体重差大/硬い)", "住之江": "淡水 (浮力小/体重差大/硬い)", 
-    "尼崎": "淡水 (浮力小/体重差大/硬い)", "鳴門": "海水 (浮力大/体重差減/柔らかい)", 
-    "丸亀": "海水 (浮力大/体重差減/柔らかい)", "児島": "海水 (浮力大/体重差減/柔らかい)", 
-    "宮島": "海水 (浮力大/体重差減/柔らかい)", "徳山": "海水 (浮力大/体重差減/柔らかい)", 
-    "下関": "海水 (浮力大/体重差減/柔らかい)", "若松": "海水 (浮力大/体重差減/柔らかい)", 
-    "芦屋": "淡水 (浮力小/体重差大/硬い)", "福岡": "汽水 (混合/時間帯で変化)", 
-    "唐津": "淡水 (浮力小/体重差大/硬い)", "大村": "海水 (浮力大/体重差減/柔らかい)"
+    "桐生": "淡水 (浮力小/体重差大/硬い)", "戸田": "淡水 (浮力小/体重差大/硬い)", "江戸川": "汽水 (混合/時間帯で変化)", "平和島": "海水 (浮力大/体重差減/柔らかい)", 
+    "多摩川": "淡水 (浮力小/体重差大/硬い)", "浜名湖": "汽水 (混合/時間帯で変化)", "蒲郡": "汽水 (混合/時間帯で変化)", "常滑": "海水 (浮力大/体重差減/柔らかい)", 
+    "津": "汽水 (混合/時間帯で変化)", "三国": "淡水 (浮力小/体重差大/硬い)", "びわこ": "淡水 (浮力小/体重差大/硬い)", "住之江": "淡水 (浮力小/体重差大/硬い)", 
+    "尼崎": "淡水 (浮力小/体重差大/硬い)", "鳴門": "海水 (浮力大/体重差減/柔らかい)", "丸亀": "海水 (浮力大/体重差減/柔らかい)", "児島": "海水 (浮力大/体重差減/柔らかい)", 
+    "宮島": "海水 (浮力大/体重差減/柔らかい)", "徳山": "海水 (浮力大/体重差減/柔らかい)", "下関": "海水 (浮力大/体重差減/柔らかい)", "若松": "海水 (浮力大/体重差減/柔らかい)", 
+    "芦屋": "淡水 (浮力小/体重差大/硬い)", "福岡": "汽水 (混合/時間帯で変化)", "唐津": "淡水 (浮力小/体重差大/硬い)", "大村": "海水 (浮力大/体重差減/柔らかい)"
 }
-
 VENUE_WIND_MAP = {
     "桐生": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]}, "戸田": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]},
     "江戸川": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "平和島": {"tail": ["北", "北東"], "head": ["南", "南西"]},
@@ -80,41 +79,25 @@ VENUE_WIND_MAP = {
     "芦屋": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "福岡": {"tail": ["北", "北東"], "head": ["南", "南西"]},
     "唐津": {"tail": ["西", "北西", "南西"], "head": ["東", "南東", "北東"]}, "大村": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]}
 }
-
 VENUE_PROFILE = {
-    "桐生": "標高が高くモーターパワーが落ちる「標高マジック」あり。イン勝率は低めで、センターからの攻めが届きやすい。",
-    "戸田": "コース幅が日本一狭く、1マークがスタンド側に寄っているためイン激弱。3・4コースからの強襲が頻発する波乱水面。",
-    "江戸川": "河川を利用した日本屈指の難水面。潮の満ち引きと風が複雑に絡み、選手の「波乗り技術」が勝敗を分ける。",
-    "平和島": "ビル風が舞う水面。イン勝率が全国ワーストクラスに低く、ダッシュ勢の「まくり差し」が全国一決まりやすい。",
-    "多摩川": "日本一の静水面。スピード戦になりやすく全速ターンが決まるため、モーター素性とスピードがモロに結果に出る。",
-    "浜名湖": "広大な汽水水面。スピードに乗ったダイナミックな旋回が多く、枠を問わず機力上位の選手が台頭しやすい。",
-    "蒲郡": "ナイター開催で気温が下がりやすくモーターの出足が良い。インも強いが、スピード戦のまくりも決まるハイレベルな水面。",
-    "常滑": "伊勢湾の海風が吹き込む。イン逃げが比較的強いが、向かい風が強まるとセンター勢の出番が急増する。",
-    "津": "伊勢湾からの強風が吹き荒れる「風の津」。夏は追い風、冬は向かい風で展開がガラリと変わる荒れ水面。",
-    "三国": "日本海側の強風と波の影響を受けやすい。イン勝率が高めだが、荒れ水面になるとベテランの差しが不気味に台頭する。",
-    "びわこ": "標高が高く特有の「うねり」が発生。インが弱く、センター勢の強烈なまくりが飛び出す。",
-    "住之江": "ボートレースの聖地。工業用水で水が硬くモーター差が出やすい。ナイター特有のインの強さが顕著。",
-    "尼崎": "センターの「まくり」が決まりにくい静水面。インと2コースの差しが強く、堅い決着が多い本命党向け。",
-    "鳴門": "潮の干満差が激しく、1マークが狭いためインが難しい。スロー勢がもたつくとアウトからの強襲が刺さる。",
-    "丸亀": "満潮時はイン有利、干潮時はセンター有利と、時間帯で水面が豹変し狙い目が変わる。",
-    "児島": "瀬戸内海の海水で干満差が2メートル以上。満潮時はイン逃げ・差し、干潮時はアウトのまくりがセオリー。",
-    "宮島": "干満差が全国最大クラス。潮の動きでスタート勘が狂いやすく、思わぬダッシュからの波乱が起きる。",
-    "徳山": "笠戸湾に面し風の影響を防ぐためイン勝率が非常に高い。「モーニング＝イン逃げ」が絶対的セオリー。",
-    "下関": "LED照明が明るいナイター。海水だが波は穏やかで、イン勝率が全国トップクラスに高い「大本命水面」。",
-    "若松": "潮の満ち引きがある海水ナイター。満潮はイン、干潮はまくり。時間帯と潮見表の確認が必須のテクニカル水面。",
-    "芦屋": "1マークのバック側が広く、インが全速で余裕を持って回れるためイン勝率が極めて高い。本命党向け。",
-    "福岡": "うねりと独特の風が複雑に絡む超・難水面。1マークの振り幅が大きく、ダッシュ勢のまくり・まくり差しが炸裂する。",
-    "唐津": "ピットから1マークまでの距離が全国一遠く、助走が長いため「行き足」が超重要。モーニング特有のインの強さがある。",
-    "大村": "全国No.1のイン勝率を誇る「絶対的イン天国」。風や波がよほど荒れない限り、イン逃げからどう絞るかの勝負。"
+    "桐生": "標高が高くモーターパワーが落ちる「標高マジック」あり。イン勝率は低めで、センターからの攻めが届きやすい。", "戸田": "コース幅が日本一狭く、1マークがスタンド側に寄っているためイン激弱。3・4コースからの強襲が頻発する波乱水面。",
+    "江戸川": "河川を利用した日本屈指の難水面。潮の満ち引きと風が複雑に絡み、選手の「波乗り技術」が勝敗を分ける。", "平和島": "ビル風が舞う水面。イン勝率が全国ワーストクラスに低く、ダッシュ勢の「まくり差し」が全国一決まりやすい。",
+    "多摩川": "日本一の静水面。スピード戦になりやすく全速ターンが決まるため、モーター素性とスピードがモロに結果に出る。", "浜名湖": "広大な汽水水面。スピードに乗ったダイナミックな旋回が多く、枠を問わず機力上位の選手が台頭しやすい。",
+    "蒲郡": "ナイター開催で気温が下がりやすくモーターの出足が良い。インも強いが、スピード戦のまくりも決まるハイレベルな水面。", "常滑": "伊勢湾の海風が吹き込む。イン逃げが比較的強いが、向かい風が強まるとセンター勢の出番が急増する。",
+    "津": "伊勢湾からの強風が吹き荒れる「風の津」。夏は追い風、冬は向かい風で展開がガラリと変わる荒れ水面。", "三国": "日本海側の強風と波の影響を受けやすい。イン勝率が高めだが、荒れ水面になるとベテランの差しが不気味に台頭する。",
+    "びわこ": "標高が高く特有の「うねり」が発生。インが弱く、センター勢の強烈なまくりが飛び出す。", "住之江": "ボートレースの聖地。工業用水で水が硬くモーター差が出やすい。ナイター特有のインの強さが顕著。",
+    "尼崎": "センターの「まくり」が決まりにくい静水面。インと2コースの差しが強く、堅い決着が多い本命党向け。", "鳴門": "潮の干満差が激しく、1マークが狭いためインが難しい。スロー勢がもたつくとアウトからの強襲が刺さる。",
+    "丸亀": "満潮時はイン有利、干潮時はセンター有利と、時間帯で水面が豹変し狙い目が変わる。", "児島": "瀬戸内海の海水で干満差が2メートル以上。満潮時はイン逃げ・差し、干潮時はアウトのまくりがセオリー。",
+    "宮島": "干満差が全国最大クラス。潮の動きでスタート勘が狂いやすく、思わぬダッシュからの波乱が起きる。", "徳山": "笠戸湾に面し風の影響を防ぐためイン勝率が非常に高い。「モーニング＝イン逃げ」が絶対的セオリー。",
+    "下関": "LED照明が明るいナイター。海水だが波は穏やかで、イン勝率が全国トップクラスに高い「大本命水面」。", "若松": "潮の満ち引きがある海水ナイター。満潮はイン、干潮はまくり。時間帯と潮見表の確認が必須のテクニカル水面。",
+    "芦屋": "1マークのバック側が広く、インが全速で余裕を持って回れるためイン勝率が極めて高い。本命党向け。", "福岡": "うねりと独特の風が複雑に絡む超・難水面。1マークの振り幅が大きく、ダッシュ勢のまくり・まくり差しが炸裂する。",
+    "唐津": "ピットから1マークまでの距離が全国一遠く、助走が長いため「行き足」が超重要。モーニング特有のインの強さがある。", "大村": "全国No.1のイン勝率を誇る「絶対的イン天国」。風や波がよほど荒れない限り、イン逃げからどう絞るかの勝負。"
 }
 
 def get_wind_type(venue, raw_dir):
     if not raw_dir: return "無風/横風"
     raw_dir = str(raw_dir).strip()
-    numeric_wind_map = {
-        "1": "北", "2": "北北東", "3": "北東", "4": "東北東", "5": "東", "6": "東南東", "7": "南東", "8": "南南東",
-        "9": "南", "10": "南南西", "11": "南西", "12": "西南西", "13": "西", "14": "西北西", "15": "北西", "16": "北北西"
-    }
+    numeric_wind_map = {"1": "北", "2": "北北東", "3": "北東", "4": "東北東", "5": "東", "6": "東南東", "7": "南東", "8": "南南東", "9": "南", "10": "南南西", "11": "南西", "12": "西南西", "13": "西", "14": "西北西", "15": "北西", "16": "北北西"}
     if raw_dir in numeric_wind_map: raw_dir = numeric_wind_map[raw_dir]
     if raw_dir == "無風" or raw_dir == "0": return "無風/横風"
     v_map = VENUE_WIND_MAP.get(venue)
@@ -126,19 +109,16 @@ def get_wind_type(venue, raw_dir):
     return "無風/横風"
 
 def safe_float(val):
-    try:
-        clean_str = str(val).strip().translate(str.maketrans('１２３４５６７８９０．', '1234567890.'))
-        return float(clean_str)
+    try: return float(str(val).strip().translate(str.maketrans('１２３４５６７８９０．', '1234567890.')))
     except: return None
 
 def safe_int(val):
     try:
-        clean_str = str(val).strip().translate(str.maketrans('１２３４５６７８９０', '1234567890'))
-        if clean_str.endswith('.0'): clean_str = clean_str[:-2]
-        return int(clean_str)
+        c = str(val).strip().translate(str.maketrans('１２３４５６７８９０', '1234567890'))
+        if c.endswith('.0'): c = c[:-2]
+        return int(c)
     except: return None
 
-# --- UIレイアウト構築 ---
 st.markdown("<h1 style='text-align: center; color: #facc15;'>⚡ 12TUELVUN</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>大衆の予想を出し抜き、己の力で水面を支配するための絶対領域。</p>", unsafe_allow_html=True)
 st.divider()
@@ -158,7 +138,6 @@ with col1:
     weather_raw = st.selectbox("☔ 天候", ["晴 (良水面)", "曇 (良水面)", "雨 (視界不良/波乱)", "雪 (極寒/大波乱)", "指定なし (全天候)"])
     press_raw = st.selectbox("☁️ 気圧", ["1000hPa未満 (台風級)", "1000〜1005hPa (低気圧)", "1005〜1010hPa (やや低気圧)", "1010〜1015hPa (標準)", "1015〜1020hPa (やや高気圧)", "1020hPa以上 (高気圧)", "指定なし (全気圧)"], index=3)
     humidity_raw = st.selectbox("💧 湿度", ["30%未満 (超乾燥)", "30〜45% (乾燥)", "45〜60% (標準)", "60〜75% (やや多湿)", "75%以上 (多湿/雨天)", "指定なし (全湿度)"], index=2)
-
 with col2:
     water_qual_raw = st.selectbox("🧪 水質", water_opts, index=water_opts.index(default_water))
     def_tide_idx = 3 if "淡水" in default_water else 2
@@ -170,20 +149,20 @@ with col2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-if not database_ready:
-    st.error("⚠️ データベースの同期が完了するまで、解析は実行できません。")
+if not DRIVE_URL:
+    st.warning("⚠️ サイドバーに「Googleドライブ共有リンク」を貼り付けてください。")
+elif not sync_database_from_cloud():
+    st.stop()
 else:
     if st.button("⚡ 12TUELVUN 解析を実行", use_container_width=True):
         stats_exact = {str(i): {"count": 0, "wins": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
         stats_broad = {str(i): {"count": 0, "wins": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
         venue_baseline = {str(i): {"count": 0, "wins": 0} for i in range(1, 7)}
-        
         match_counts = {"exact": 0, "broad": 0}
         total_rows_read = 0
 
         with st.spinner("🔍 過去10年・339万件のデータを完璧にグループ化して解析中..."):
             try:
-                # 💡 PC版の重戦車ロジック：レースごとに完璧に整頓する
                 races_in_memory = defaultdict(list)
                 target_venue_clean = venue.replace(" ", "").replace("　", "")
 
@@ -192,16 +171,13 @@ else:
                     for row in reader:
                         total_rows_read += 1
                         file_v = str(row.get("レース場", "")).replace(" ", "").replace("　", "")
-                        
                         if file_v == target_venue_clean:
                             r_id = f"{str(row.get('日付', '')).strip()}_{str(row.get('レース番号', '')).strip()}"
                             races_in_memory[r_id].append(row)
 
-                # 整頓されたレースの塊ごとに判定
                 for r_id, rows in races_in_memory.items():
                     if not rows: continue
                     first_row = rows[0]
-                    
                     for r in rows:
                         b_num, is_win = get_boat_and_rank(r)
                         if b_num in venue_baseline:
@@ -217,7 +193,6 @@ else:
                     wave = safe_int(first_row.get("波高"))
                     actual_weather = str(first_row.get("天候", ""))
                     raw_wind_direction = str(first_row.get("風向", ""))
-
                     if wind_speed is None: wind_speed = 0
                     if wave is None: wave = 0
 
@@ -226,7 +201,6 @@ else:
                         b, _ = get_boat_and_rank(r)
                         t = safe_float(r.get("展示"))
                         if b and t is not None: times.append((b, t))
-                    
                     times.sort(key=lambda x: x[1])
                     fastest_boat = times[0][0] if times else None
 
@@ -302,7 +276,6 @@ else:
                             b_num, is_win = get_boat_and_rank(r)
                             if not b_num: continue
                             k = str(r.get("決まり手", "不明")).strip()
-                            
                             if is_broad_match:
                                 stats_broad[b_num]["count"] += 1
                                 if is_win:
@@ -344,7 +317,6 @@ else:
                 ai_wave = wave_raw.split(' ')[0]
                 ai_tide = tide_raw.split(' ')[0]
 
-                # 💡 削ってしまった完全版の解説文を大復活！
                 profiling_html = []
                 def add_prof(title, desc, color="#d1d5db"):
                     profiling_html.append(f"<div style='margin-bottom: 8px;'><strong style='color:#fcd34d;'>{title}</strong><br><span style='color:{color};'>└ {desc}</span></div>")
@@ -416,20 +388,7 @@ else:
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
                         prompt = f"""
                         あなたは水面の「事実」だけを刻む独自の予測システム【12TUELVUN】のコアAIです。
-                        レース場: {venue}
-                        時間帯: 【{ai_time}】
-                        気温: 【{ai_season}】
-                        水温: 【{ai_w_temp}】
-                        水質: 【{ai_w_qual}】
-                        気圧: 【{ai_press}】
-                        湿度: 【{ai_humid}】
-                        風向: 【{wind_dir_raw}】
-                        風速: 【{ai_wind_spd}】
-                        波高: 【{ai_wave}】
-                        潮回り: 【{ai_tide}】
-                        展示トップ: {exhibit_raw}
-                        頻発する決まり手: {k_str}
-
+                        レース場: {venue}, 時間帯: 【{ai_time}】, 気温: 【{ai_season}】, 水温: 【{ai_w_temp}】, 水質: 【{ai_w_qual}】, 気圧: 【{ai_press}】, 湿度: 【{ai_humid}】, 風向: 【{wind_dir_raw}】, 風速: 【{ai_wind_spd}】, 波高: 【{ai_wave}】, 潮回り: 【{ai_tide}】, 展示トップ: {exhibit_raw}, 頻発する決まり手: {k_str}
                         1. 冒頭は「今、ひとりでこの分析画面を見つめているあなたなら、もう気づいているはずだ。毎日ただ単純な予想に頼り、思考停止で負け続ける日々はもう終わりにしよう。12TUELVUNは過去10年以上の膨大なデータと物理法則から、プロの環境認識を完全に代行する。」で始めること。
                         2. 指定された時間帯、水温、水質、気圧、風速、潮回りの数値を必ず文章内で使って解説。
                         3. お金や賭けの用語は一切使わず、純粋な水面のドラマとして500文字程度で出力。
@@ -437,20 +396,16 @@ else:
                         """
                         data = {"contents": [{"parts": [{"text": prompt}]}]}
                         req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
-                        
                         ctx_ai = ssl.create_default_context()
                         ctx_ai.check_hostname = False
                         ctx_ai.verify_mode = ssl.CERT_NONE
-                        
                         with urllib.request.urlopen(req, context=ctx_ai) as response:
                             result = json.loads(response.read().decode('utf-8'))
                             ai_story = result['candidates'][0]['content']['parts'][0]['text']
-                            
                     except urllib.error.HTTPError as e:
-                        err_body = e.read().decode('utf-8')
-                        ai_story = f"⚠️ 【AI通信エラー】\nGoogleのAIが混み合っているか、拒否されました。\n\n[詳細]:\n{err_body}"
+                        ai_story = f"⚠️ 【AI通信エラー】\nGoogleのAIが混み合っているか、拒否されました。\n\n[詳細]:\n{e.read().decode('utf-8')}"
                     except Exception as e:
-                        ai_story = f"⚠️ 【AI通信エラー】\n通信に失敗しました。\n\n[詳細]: {str(e)}"
+                        ai_story = f"⚠️ 【AI通信エラー】\n通信に失敗しました。\n[詳細]: {str(e)}"
                 else:
                     ai_story = "⚠️ 【AI待機中】\n画面左側のメニュー（スマホの場合は左上の「＞」マーク）から、AI用のAPIキーを入力してください。"
 
