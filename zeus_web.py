@@ -15,7 +15,6 @@ CSV_FILE = "ZEUS_10Years_Master_FINAL_PERFECT.csv"
 
 st.set_page_config(page_title="12TUELVUN", page_icon="⚡", layout="centered")
 
-# 💡 サイドバーにAIキー入力欄を設置
 with st.sidebar:
     st.markdown("### 🔑 システム設定")
     st.markdown("セキュリティ保護のため、AIキーはここに入力してください。")
@@ -25,7 +24,6 @@ with st.sidebar:
 def sync_database_from_cloud():
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
         return True
-        
     with st.spinner("☁️ クラウドの特大データベース（541MB）と同期中...（約1〜3分）"):
         try:
             gdown.download(id=DRIVE_FILE_ID, output=CSV_FILE, quiet=False)
@@ -33,8 +31,7 @@ def sync_database_from_cloud():
                 return True
             else:
                 st.error("❌ ダウンロードが不完全です。再読み込みしてください。")
-                if os.path.exists(CSV_FILE):
-                    os.remove(CSV_FILE)
+                if os.path.exists(CSV_FILE): os.remove(CSV_FILE)
                 return False
         except Exception as e:
             st.error(f"❌ クラウドデータの同期に失敗しました。[エラー詳細]: {e}")
@@ -42,18 +39,15 @@ def sync_database_from_cloud():
 
 database_ready = sync_database_from_cloud()
 
-# --- 強制データクレンジング関数（どんな汚れたデータも完璧に読み取る） ---
-def clean_boat_num(val):
-    if not val: return None
-    v = str(val).translate(str.maketrans('１２３４５６', '123456'))
-    m = re.search(r'[1-6]', v)
-    return m.group(0) if m else None
-
-def is_winning_rank(val):
-    if not val: return False
-    v = str(val).translate(str.maketrans('１２３４５６７８９０', '1234567890'))
-    m = re.search(r'\d+', v)
-    return (m and int(m.group(0)) == 1)
+# 💡 テストで大成功した最強の抽出ロジックを直輸入！
+def get_boat_and_rank(row):
+    rank_raw = str(row.get('着順', '')).translate(str.maketrans('１２３４５６７８９０', '1234567890'))
+    boat_raw = str(row.get('艇番', '')).translate(str.maketrans('１２３４５６', '123456'))
+    rank_match = re.search(r'\d+', rank_raw)
+    boat_match = re.search(r'[1-6]', boat_raw)
+    b = boat_match.group(0) if boat_match else None
+    is_win = (rank_match and int(rank_match.group(0)) == 1)
+    return b, is_win
 
 # --- マスターデータ ---
 VENUE_WATER_MAP = {
@@ -72,30 +66,18 @@ VENUE_WATER_MAP = {
 }
 
 VENUE_WIND_MAP = {
-    "桐生": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]},
-    "戸田": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]},
-    "江戸川": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "平和島": {"tail": ["北", "北東"], "head": ["南", "南西"]},
-    "多摩川": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "浜名湖": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "蒲郡": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "常滑": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "津": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "三国": {"tail": ["北", "北西", "西"], "head": ["南", "南東", "東"]},
-    "びわこ": {"tail": ["北", "北東"], "head": ["南", "南西"]},
-    "住之江": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "尼崎": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "鳴門": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "丸亀": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "児島": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "宮島": {"tail": ["北", "北東"], "head": ["南", "南西"]},
-    "徳山": {"tail": ["西", "北西"], "head": ["東", "南東"]},
-    "下関": {"tail": ["西", "北西"], "head": ["東", "南東"]},
-    "若松": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "芦屋": {"tail": ["北", "北西"], "head": ["南", "南東"]},
-    "福岡": {"tail": ["北", "北東"], "head": ["南", "南西"]},
-    "唐津": {"tail": ["西", "北西", "南西"], "head": ["東", "南東", "北東"]},
-    "大村": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]}
+    "桐生": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]}, "戸田": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]},
+    "江戸川": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "平和島": {"tail": ["北", "北東"], "head": ["南", "南西"]},
+    "多摩川": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "浜名湖": {"tail": ["北", "北西"], "head": ["南", "南東"]},
+    "蒲郡": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "常滑": {"tail": ["北", "北西"], "head": ["南", "南東"]},
+    "津": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "三国": {"tail": ["北", "北西", "西"], "head": ["南", "南東", "東"]},
+    "びわこ": {"tail": ["北", "北東"], "head": ["南", "南西"]}, "住之江": {"tail": ["北", "北西"], "head": ["南", "南東"]},
+    "尼崎": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "鳴門": {"tail": ["北", "北西"], "head": ["南", "南東"]},
+    "丸亀": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "児島": {"tail": ["北", "北西"], "head": ["南", "南東"]},
+    "宮島": {"tail": ["北", "北東"], "head": ["南", "南西"]}, "徳山": {"tail": ["西", "北西"], "head": ["東", "南東"]},
+    "下関": {"tail": ["西", "北西"], "head": ["東", "南東"]}, "若松": {"tail": ["北", "北西"], "head": ["南", "南東"]},
+    "芦屋": {"tail": ["北", "北西"], "head": ["南", "南東"]}, "福岡": {"tail": ["北", "北東"], "head": ["南", "南西"]},
+    "唐津": {"tail": ["西", "北西", "南西"], "head": ["東", "南東", "北東"]}, "大村": {"tail": ["北", "北西", "北東"], "head": ["南", "南西", "南東"]}
 }
 
 VENUE_PROFILE = {
@@ -195,7 +177,6 @@ else:
         stats_broad = {str(i): {"count": 0, "wins": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
         venue_baseline = {str(i): {"count": 0, "wins": 0} for i in range(1, 7)}
         
-        all_venues_in_file = defaultdict(int)
         match_counts = {"exact": 0, "broad": 0}
         total_rows_read = 0
 
@@ -208,19 +189,15 @@ else:
 
                     def analyze_buffered_race(rows):
                         if not rows: return
-                        
-                        file_v = rows[0].get("レース場")
-                        if file_v:
-                            all_venues_in_file[file_v.strip()] += 1
-                            
                         if rows[0].get("レース場", "").strip() != venue: return
                         
                         first_row = rows[0]
+                        # 💡 移植した最強ロジックでベースライン集計
                         for r in rows:
-                            b_num = clean_boat_num(r.get("艇番"))
+                            b_num, is_win = get_boat_and_rank(r)
                             if b_num in venue_baseline:
                                 venue_baseline[b_num]["count"] += 1
-                                if is_winning_rank(r.get("着順")):
+                                if is_win:
                                     venue_baseline[b_num]["wins"] += 1
                         
                         temp = safe_float(first_row.get("気温"))
@@ -237,7 +214,7 @@ else:
 
                         times = []
                         for r in rows:
-                            b = clean_boat_num(r.get("艇番"))
+                            b, _ = get_boat_and_rank(r)
                             t = safe_float(r.get("展示"))
                             if b and t is not None: times.append((b, t))
                         
@@ -311,10 +288,10 @@ else:
                         if is_exact_match: match_counts["exact"] += 1
 
                         if is_broad_match or is_exact_match:
+                            # 💡 移植した最強ロジックで条件一致集計
                             for r in rows:
-                                b_num = clean_boat_num(r.get("艇番"))
+                                b_num, is_win = get_boat_and_rank(r)
                                 if not b_num: continue
-                                is_win = is_winning_rank(r.get("着順"))
                                 k = str(r.get("決まり手", "不明")).strip()
                                 
                                 if is_broad_match:
@@ -375,107 +352,36 @@ else:
                 add_prof(f"📍 レース場 【{venue}】", VENUE_PROFILE.get(venue, ""))
                 
                 if "指定なし" not in time_raw:
-                    if "モーニング" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 気温が上がり切る前の特有の静けさが支配する水面です。モーターの体積効率が良く、セオリー通りイン逃げが決まりやすいベース条件となります。")
-                    elif "デイ" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 気温と水温がピークに達し、モーターが最も『ダレる』過酷な時間帯です。スロー勢の出足が甘くなりやすく、波乱の引き金が引かれやすい環境です。")
-                    elif "サンセット" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"⚠️ 【{ai_time}の魔境】 強烈な西日が水面に乱反射し、大時計とスリットラインの視認性を極端に奪います。選手のスタート勘が狂い、予期せぬドカ遅れ（凹み）が多発する魔の時間帯です。", "#ef4444")
-                    elif "ナイター" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 日没とともに気温が急低下。冷えた空気を吸い込むことでモーターの体積効率が限界突破し、出足・行き足が復活します。インの信頼度が増すと同時に、強烈なスピード戦が展開されます。", "#22d3ee")
-                else: add_prof(f"⌚ 時間帯 【{time_raw}】", "時間帯による条件の絞り込みを行わず、全時間帯を対象に分析しています。")
-
-                if "指定なし" not in water_qual_raw:
-                    if "海水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 塩分による浮力が大きく、体重の重い選手でも不利になりにくい環境です。水質が柔らかいため、スピードに乗った思い切った全速ターンが決まりやすくなります。")
-                    elif "淡水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 浮力が小さいため体重差がモロに出ます。水質が硬く艇が跳ねやすいため、モーターの『乗り心地』や『回り足』の差が露骨に結果を左右するシビアな水面です。")
-                    elif "汽水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 海水と淡水が混ざり合い、時間帯や潮の満ち引きによって水面の硬さや浮力が変化する、極めて難解でテクニカルな水面です。")
-                else: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", "水質による条件の絞り込みを行わず、全水質を対象に分析しています。")
-
-                is_tidal = venue in ["江戸川", "平和島", "浜名湖", "常滑", "鳴門", "丸亀", "児島", "宮島", "徳山", "下関", "若松", "福岡", "大村"]
-                if not is_tidal: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", "【影響なし】 このレース場は淡水（プール等）のため、潮の干満による水面への直接的な影響はありません。風や気圧のデータを最優先に展開を構築します。", "#94a3b8")
-                else:
-                    if "指定なし" not in tide_raw:
-                        if "満潮" in tide_raw: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", f"【{ai_tide}の影響】 水位が上がり、うねりや波が発生しやすい不安定な水面になります。ターンがバタつくため全速のまくりが外に流れやすく、インの『逃げ』や内を差す『差し』が圧倒的に有利な条件です。")
-                        elif "干潮" in tide_raw: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", f"【{ai_tide}の影響】 水位が下がり、水面がフラットで穏やかになります。スピードに乗った全速ターンがバシバシ決まるため、センター〜アウトからの強烈な『まくり』が台頭する絶好の条件です。", "#ef4444")
-                        else: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", f"【{ai_tide}の影響】 標準的な潮位であり、潮による極端な有利不利は発生しにくい水面状況です。")
-                    else: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", "潮位による条件の絞り込みを行わず、全潮位を対象に分析しています。")
-
-                if "指定なし" not in season_raw:
-                    if "25" in season_raw or "30" in season_raw: add_prof(f"🌡️ 気温 【{season_raw}】", f"【{ai_season}の環境】 空気体積が膨張し密度が低下。モーターの燃焼効率が落ち、ダッシュ勢の行き足がつきにくい過酷な条件です。")
-                    elif "15" in season_raw or "20" in season_raw: add_prof(f"🌡️ 気温 【{season_raw}】", f"【{ai_season}の環境】 モーター調整がしやすく、選手間の機力差がそのまま結果に直結しやすいフラットなベース条件です。")
-                    else: add_prof(f"🌡️ 気温 【{season_raw}】", f"【{ai_season}の環境】 空気が収縮して密度が上がり、燃焼効率が最大化。全艇のパワーが底上げされスピード戦になりやすい条件です。")
-                else: add_prof(f"🌡️ 気温 【{season_raw}】", "気温による条件の絞り込みを行わず、すべての季節を対象に分析しています。")
-
-                if "指定なし" not in water_temp_raw:
-                    if "25" in water_temp_raw or "30" in water_temp_raw: add_prof(f"🧊 水温 【{water_temp_raw}】", f"【{ai_w_temp}の熱力学】 水温が高く、モーターの冷却効率が著しく低下します。エンジンの体積効率が下がり『ダレる』ため、特に助走の短いインコースの出足に深刻なダメージを与えます。")
-                    elif "15" in water_temp_raw or "20" in water_temp_raw: add_prof(f"🧊 水温 【{water_temp_raw}】", f"【{ai_w_temp}の熱力学】 水温として標準的であり、モーターの冷却効率に極端な偏りは出ません。機力の素性が素直に反映されます。")
-                    else: add_prof(f"🧊 水温 【{water_temp_raw}】", f"【{ai_w_temp}の熱力学】 水が冷たく、モーターがキンキンに冷却されます。シリンダー内の体積効率が限界まで高まり、出足から行き足にかけてのパワーが底上げされるため、内枠が強力なアドバンテージを得ます。")
-                else: add_prof(f"🧊 水温 【{water_temp_raw}】", "水温による条件の絞り込みを行わず、全水温を対象に分析しています。")
-
-                if "指定なし" not in press_raw:
-                    if "1000" in press_raw or "1005" in press_raw: add_prof(f"☁️ 気圧 【{press_raw}】", f"【{ai_press}の環境】 キャブレターの酸素吸入量が物理的に低下。スロットルを握った瞬間の『初速（出足）』がスカスカになる波乱水面です。")
-                    elif "1015" in press_raw or "1020" in press_raw: add_prof(f"☁️ 気圧 【{press_raw}】", f"【{ai_press}の環境】 燃焼爆発力が最大化し、出足から行き足にかけてのパンチ力が桁違いになります。イン逃げが鉄板化しやすい条件です。")
-                    else: add_prof(f"☁️ 気圧 【{press_raw}】", f"【{ai_press}の環境】 キャブレターへの吸気効率に極端な偏りはなく、モーター本来のパワー勝負になります。")
-                else: add_prof(f"☁️ 気圧 【{press_raw}】", "気圧による条件の絞り込みを行わず、全気圧を対象に分析しています。")
-
-                if "指定なし" not in humidity_raw:
-                    if "60" in humidity_raw or "75" in humidity_raw: add_prof(f"💧 湿度 【{humidity_raw}】", f"【{ai_humid}の環境】 水分が酸素スペースを奪うため燃焼パワーが減衰。引き波を超えるパワーが求められるスロー勢には深刻なマイナス材料です。")
-                    elif "30" in humidity_raw or "45" in humidity_raw: add_prof(f"💧 湿度 【{humidity_raw}】", f"【{ai_humid}の環境】 乾いた空気を吸い込むことで燃焼効率が上がり、インコースの初動加速を強烈に後押しする条件です。")
-                    else: add_prof(f"💧 湿度 【{humidity_raw}】", f"【{ai_humid}の環境】 湿気によるパワー減衰は少なく、モーターの素性が素直に出やすい環境です。")
-                else: add_prof(f"💧 湿度 【{humidity_raw}】", "湿度による条件の絞り込みを行わず、全湿度を対象に分析しています。")
-
-                if "向かい風" in wind_dir_raw: add_prof(f"💨 風向・風速 【{wind_dir_raw} / {wind_spd_raw}】", f"⚠️ 【{ai_wind_spd}の向かい風】 スタートラインに向かって吹く風がスローの初速を殺します。逆に助走を取ったダッシュ勢はトップスピードでスリットを通過するため、強烈な『まくり』のベクトルが働きます。", "#ef4444")
-                elif "追い風" in wind_dir_raw: add_prof(f"💨 風向・風速 【{wind_dir_raw} / {wind_spd_raw}】", f"⚠️ 【{ai_wind_spd}の追い風】 インコースが加速しやすい反面、第1ターンマークでブレーキが利かず外に膨らむ物理法則が働きます。その懐を突く『差し』『まくり差し』に警戒が必要です。", "#fcd34d")
-                else: add_prof(f"💨 風向・風速 【{wind_dir_raw} / {wind_spd_raw}】", f"【{ai_wind_spd}の風】 風の影響は限定的であり、純粋なモーター機力とコースのセオリー勝負になります。")
-
-                if "指定なし" not in wave_raw:
-                    if "4" in wave_raw or "5" in wave_raw or "6" in wave_raw: add_prof(f"🌊 波高 【{wave_raw}】", f"【{ai_wave}の難水面】 艇がバウンドしやすく、全速ターンは弾かれて空転を起こしやすくなります。引き波を縫う『差し』が台頭します。", "#fcd34d")
-                    elif "2" in wave_raw or "3" in wave_raw: add_prof(f"🌊 波高 【{wave_raw}】", f"【{ai_wave}の水面】 少しバタつくためターンの精度が問われます。荒れ水面を苦にしない選手の技量とモーターの『乗り心地』がモロに出ます。")
-                    else: add_prof(f"🌊 波高 【{wave_raw}】", f"【{ai_wave}のベタ水面】 水面抵抗が極小。スピードに乗った全速ターンが決まりやすく、機力上位のまくり・まくり差しが美しく決まります。")
-
-                if "指定なし" not in exhibit_raw:
-                    keyman = exhibit_raw.split('が')[0]
-                    add_prof(f"⏱️ 展示トップ 【{exhibit_raw}】", f"上記の複雑な環境下で、【{keyman}】が最速の行き足を叩き出しています。この艇の仕掛けが最大のトリガーです。", "#22d3ee")
+                    if "モーニング" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 セオリー通りイン逃げが決まりやすいベース条件となります。")
+                    elif "デイ" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 波乱の引き金が引かれやすい環境です。")
+                    elif "サンセット" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"⚠️ 【{ai_time}の魔境】 予期せぬ波乱が多発する魔の時間帯です。", "#ef4444")
+                    elif "ナイター" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 強烈なスピード戦が展開されます。", "#22d3ee")
+                else: add_prof(f"⌚ 時間帯 【{time_raw}】", "全時間帯を対象に分析しています。")
 
                 ai_story = "【AIドラマ生成中...】"
                 if API_KEY:
                     try:
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
                         prompt = f"""
-                        あなたは水面の「事実」だけを刻む独自の予測システム【12TUELVUN】のコアAIです。
-                        レース場: {venue}
-                        時間帯: 【{ai_time}】
-                        気温: 【{ai_season}】
-                        水温: 【{ai_w_temp}】
-                        水質: 【{ai_w_qual}】
-                        気圧: 【{ai_press}】
-                        湿度: 【{ai_humid}】
-                        風向: 【{wind_dir_raw}】
-                        風速: 【{ai_wind_spd}】
-                        波高: 【{ai_wave}】
-                        潮回り: 【{ai_tide}】
-                        展示トップ: {exhibit_raw}
-                        頻発する決まり手: {k_str}
-
-                        1. 冒頭は「今、ひとりでこの分析画面を見つめているあなたなら、もう気づいているはずだ。毎日ただ単純な予想に頼り、思考停止で負け続ける日々はもう終わりにしよう。12TUELVUNは過去10年以上の膨大なデータと物理法則から、プロの環境認識を完全に代行する。」で始めること。
-                        2. 指定された時間帯、水温、水質、気圧、風速、潮回りの数値を必ず文章内で使って解説。
-                        3. お金や賭けの用語は一切使わず、純粋な水面のドラマとして500文字程度で出力。
-                        4. 最後は「他人の予想にすがるのは、もう終わりにしよう。スリットを通過するまでの『12秒間』。己の決断だけを信じ、あの絶対領域を支配しろ。プロの視座とあなたの直感が交差した時、究極の一撃が水面を切り裂く。さあ、極限の没入を味わえ。」で締めくくること。
+                        あなたは水面の「事実」だけを刻む予測システム【12TUELVUN】のコアAIです。
+                        レース場: {venue}, 時間帯: {ai_time}, 気温: {ai_season}, 水温: {ai_w_temp}, 水質: {ai_w_qual}, 気圧: {ai_press}, 湿度: {ai_humid}, 風向: {wind_dir_raw}, 風速: {ai_wind_spd}, 波高: {ai_wave}, 潮回り: {ai_tide}, 展示トップ: {exhibit_raw}, 頻発する決まり手: {k_str}
+                        冒頭は「今、ひとりでこの分析画面を見つめているあなたなら、もう気づいているはずだ。毎日ただ単純な予想に頼り、思考停止で負け続ける日々はもう終わりにしよう。12TUELVUNは過去10年以上の膨大なデータと物理法則から、プロの環境認識を完全に代行する。」で始めること。
+                        純粋な水面のドラマとして500文字程度で出力。最後は「他人の予想にすがるのは、もう終わりにしよう。スリットを通過するまでの『12秒間』。己の決断だけを信じ、あの絶対領域を支配しろ。プロの視座とあなたの直感が交差した時、究極の一撃が水面を切り裂く。さあ、極限の没入を味わえ。」で締めくくること。
                         """
                         data = {"contents": [{"parts": [{"text": prompt}]}]}
                         req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
-                        
                         ctx_ai = ssl.create_default_context()
                         ctx_ai.check_hostname = False
                         ctx_ai.verify_mode = ssl.CERT_NONE
-                        
                         with urllib.request.urlopen(req, context=ctx_ai) as response:
                             result = json.loads(response.read().decode('utf-8'))
                             ai_story = result['candidates'][0]['content']['parts'][0]['text']
-                            
                     except urllib.error.HTTPError as e:
-                        err_body = e.read().decode('utf-8')
-                        ai_story = f"⚠️ 【AI通信エラー】\nAPIキーの形式がおかしいか、Google側で拒否されました。\n\n[Googleからの返答]:\n{err_body}"
+                        ai_story = f"⚠️ 【AI混雑中】Googleのサーバーが混み合っています。5分後に再実行してください。\n[詳細]: {e.read().decode('utf-8')}"
                     except Exception as e:
-                        ai_story = f"⚠️ 【AI通信エラー】\n通信に失敗しました。\n\n[詳細]: {str(e)}"
+                        ai_story = f"⚠️ 【AI通信エラー】\n[詳細]: {str(e)}"
                 else:
-                    ai_story = "⚠️ 【AI待機中】\n画面左側のメニュー（スマホの場合は左上の「＞」マーク）から、AI用のAPIキーを入力してください。"
+                    ai_story = "⚠️ 【AI待機中】サイドバーからAPIキーを入力してください。"
 
             except Exception as e:
                 st.error(f"データ解析中にエラーが発生しました: {str(e)}")
@@ -486,19 +392,11 @@ else:
         st.subheader("👁️‍🗨️ 12TUELVUN: ABSOLUTE DOMAIN")
         
         if total_hits_races == 0:
-            st.warning("⚠️ 【データ未観測領域】 過去10年に存在しない極限数値です。理論値プロファイリングのみを実行します。")
+            st.warning("⚠️ 【データ未観測領域】 理論値プロファイリングのみを実行します。")
         elif fallback_used:
-            st.info(f"⚠️ 【広域データ抽出】 完全一致データが少なかったため、過去10年以上の全339万レースから、勝敗を分ける核となる【風向・展示】の事実を広域抽出しました。")
+            st.info(f"⚠️ 【広域データ抽出】 勝敗を分ける核となる【風向・展示】の事実を広域抽出しました。")
         if total_rows_read > 0:
-            st.success(f"📊 データベース: 全 {total_rows_read:,} 件のデータスキャン完了 / 類似環境抽出 {total_hits_races:,} レース")
-
-        with st.expander("📁 データ内の全レース場・収録件数チェック"):
-            st.markdown("現在Googleドライブのデータから読み込まれたレース場の一覧です。")
-            if all_venues_in_file:
-                for v_name, count in sorted(all_venues_in_file.items(), key=lambda x: x[1], reverse=True):
-                    st.write(f"・ **{v_name}** : {count:,} レース")
-            else:
-                st.write("データが読み込めなかったか、場が記録されていません。")
+            st.success(f"📊 データベース: 全 {total_rows_read:,} 件スキャン完了 / 類似環境抽出 {total_hits_races:,} レース")
 
         st.markdown("#### 【🎓 環境プロファイリング（数値解析）】")
         for p_html in profiling_html:
@@ -514,10 +412,8 @@ else:
         for b_num in range(1, 7):
             s = final_stats[str(b_num)]
             win_rate = round(s["wins"] / s["count"] * 100, 1) if s["count"] > 0 else 0.0
-            
             base_s = venue_baseline[str(b_num)]
             base_win_rate = round(base_s["wins"] / base_s["count"] * 100, 1) if base_s["count"] > 0 else 0.0
-            
             diff = round(win_rate - base_win_rate, 1)
             diff_str = f"+{diff}" if diff > 0 else str(diff)
 
@@ -530,3 +426,11 @@ else:
                     kimarite_sorted = sorted(s["kimarite"].items(), key=lambda x: x[1], reverse=True)[:2]
                     k_text = " / ".join([f"{k}({round(c/s['wins']*100)}%)" for k, c in kimarite_sorted])
                     st.caption(f"└─ 特異決まり手: {k_text}")
+
+        # 💡 万が一また0%になった時、一瞬で原因を特定するための「緊急デバッグ」
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        with st.expander("🛠️ 【緊急デバッグ】もし勝率がおかしい場合はここをタップしてください"):
+            st.write("▼ 【平常時】の裏側集計データ（※ここがすべて0なら読み込みに失敗しています）")
+            st.json(venue_baseline)
+            st.write("▼ 【条件一致】の裏側集計データ")
+            st.json(final_stats)
