@@ -3,6 +3,7 @@ import csv
 from collections import defaultdict
 import os
 import urllib.request
+import urllib.error
 import json
 import ssl
 import gdown  # 💡 巨大データ突破用の強力なツール
@@ -17,7 +18,8 @@ st.set_page_config(page_title="12TUELVUN", page_icon="⚡", layout="centered")
 with st.sidebar:
     st.markdown("### 🔑 システム設定")
     st.markdown("セキュリティ保護のため、AIキーはここに入力してください。")
-    API_KEY = st.text_input("Gemini APIキー", type="password")
+    # 💡 コピペ時の「見えない空白」を自動削除する魔法のコードを追加！
+    API_KEY = st.text_input("Gemini APIキー", type="password").strip()
 
 # --- 巨大データ自動同期ロジック (gdown安定版) ---
 def sync_database_from_cloud():
@@ -408,8 +410,8 @@ else:
                 ai_story = "【AIドラマ生成中...】"
                 if API_KEY:
                     try:
-                        # 💡 ここを gemini-1.5-flash に修正しました！
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+                        # 💡 正しい最新モデル「gemini-2.5-flash」に戻しました！
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
                         prompt = f"""
                         あなたは水面の「事実」だけを刻む独自の予測システム【12TUELVUN】のコアAIです。
                         レース場: {venue}
@@ -441,8 +443,13 @@ else:
                         with urllib.request.urlopen(req, context=ctx_ai) as response:
                             result = json.loads(response.read().decode('utf-8'))
                             ai_story = result['candidates'][0]['content']['parts'][0]['text']
+                            
+                    except urllib.error.HTTPError as e:
+                        # 💡 万が一弾かれた場合、Googleからのエラーメッセージを画面に直接表示する探知機
+                        err_body = e.read().decode('utf-8')
+                        ai_story = f"⚠️ 【AI通信エラー】\nAPIキーの形式がおかしいか、Google側で拒否されました。\n\n[Googleからの返答]:\n{err_body}"
                     except Exception as e:
-                        ai_story = f"⚠️ 【AI通信エラー】\nAPIキーが間違っているか、通信に失敗しました。\n\n[詳細]: {str(e)}"
+                        ai_story = f"⚠️ 【AI通信エラー】\n通信に失敗しました。\n\n[詳細]: {str(e)}"
                 else:
                     ai_story = "⚠️ 【AI待機中】\n画面左側のメニュー（スマホの場合は左上の「＞」マーク）から、AI用のAPIキーを入力してください。"
 
