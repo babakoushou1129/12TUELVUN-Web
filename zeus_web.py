@@ -7,7 +7,7 @@ import urllib.error
 import json
 import ssl
 import gdown
-import re  # 💡 強制抽出用の最強ツールを追加
+import re
 
 # --- 究極クラウド設定 ---
 DRIVE_FILE_ID = "1tWVFol3GauZdrUIJ_w_OKM9AZSQLbswG"
@@ -42,7 +42,7 @@ def sync_database_from_cloud():
 
 database_ready = sync_database_from_cloud()
 
-# --- 💡 強制データクレンジング関数（「1着」や「①」から数字だけを抜き出す） ---
+# --- 強制データクレンジング関数（どんな汚れたデータも完璧に読み取る） ---
 def clean_boat_num(val):
     if not val: return None
     v = str(val).translate(str.maketrans('１２３４５６', '123456'))
@@ -129,10 +129,8 @@ def get_wind_type(venue, raw_dir):
     if not raw_dir: return "無風/横風"
     raw_dir = str(raw_dir).strip()
     numeric_wind_map = {
-        "1": "北", "2": "北北東", "3": "北東", "4": "東北東",
-        "5": "東", "6": "東南東", "7": "南東", "8": "南南東",
-        "9": "南", "10": "南南西", "11": "南西", "12": "西南西",
-        "13": "西", "14": "西北西", "15": "北西", "16": "北北西"
+        "1": "北", "2": "北北東", "3": "北東", "4": "東北東", "5": "東", "6": "東南東", "7": "南東", "8": "南南東",
+        "9": "南", "10": "南南西", "11": "南西", "12": "西南西", "13": "西", "14": "西北西", "15": "北西", "16": "北北西"
     }
     if raw_dir in numeric_wind_map: raw_dir = numeric_wind_map[raw_dir]
     if raw_dir == "無風" or raw_dir == "0": return "無風/横風"
@@ -197,6 +195,7 @@ else:
         stats_broad = {str(i): {"count": 0, "wins": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
         venue_baseline = {str(i): {"count": 0, "wins": 0} for i in range(1, 7)}
         
+        all_venues_in_file = defaultdict(int)
         match_counts = {"exact": 0, "broad": 0}
         total_rows_read = 0
 
@@ -208,7 +207,13 @@ else:
                     race_buffer = []
 
                     def analyze_buffered_race(rows):
-                        if not rows or rows[0].get("レース場") != venue: return
+                        if not rows: return
+                        
+                        file_v = rows[0].get("レース場")
+                        if file_v:
+                            all_venues_in_file[file_v.strip()] += 1
+                            
+                        if rows[0].get("レース場", "").strip() != venue: return
                         
                         first_row = rows[0]
                         for r in rows:
@@ -485,7 +490,15 @@ else:
         elif fallback_used:
             st.info(f"⚠️ 【広域データ抽出】 完全一致データが少なかったため、過去10年以上の全339万レースから、勝敗を分ける核となる【風向・展示】の事実を広域抽出しました。")
         if total_rows_read > 0:
-            st.success(f"📊 データベース: 全 {total_rows_read:,} 件のデータ読み込み完了 / 類似環境抽出 {total_hits_races:,} レース")
+            st.success(f"📊 データベース: 全 {total_rows_read:,} 件のデータスキャン完了 / 類似環境抽出 {total_hits_races:,} レース")
+
+        with st.expander("📁 データ内の全レース場・収録件数チェック"):
+            st.markdown("現在Googleドライブのデータから読み込まれたレース場の一覧です。")
+            if all_venues_in_file:
+                for v_name, count in sorted(all_venues_in_file.items(), key=lambda x: x[1], reverse=True):
+                    st.write(f"・ **{v_name}** : {count:,} レース")
+            else:
+                st.write("データが読み込めなかったか、場が記録されていません。")
 
         st.markdown("#### 【🎓 環境プロファイリング（数値解析）】")
         for p_html in profiling_html:
