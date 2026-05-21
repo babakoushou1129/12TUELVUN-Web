@@ -180,140 +180,142 @@ else:
         match_counts = {"exact": 0, "broad": 0}
         total_rows_read = 0
 
-        with st.spinner("🔍 過去10年以上・339万件のデータをスキャン中..."):
+        with st.spinner("🔍 過去10年・339万件のデータを完璧にグループ化して解析中..."):
             try:
+                # 💡【重要修正】バラバラのCSVデータを、レースIDごとに完璧にグループ化する（PC版のやり方を移植）
+                races_in_memory = defaultdict(list)
+                target_venue_clean = venue.replace(" ", "").replace("　", "")
+
                 with open(CSV_FILE, "r", encoding="shift_jis", errors="replace") as f:
                     reader = csv.DictReader(f)
-                    current_race_id = None
-                    race_buffer = []
-
-                    def analyze_buffered_race(rows):
-                        if not rows: return
-                        if rows[0].get("レース場", "").strip() != venue: return
-                        
-                        first_row = rows[0]
-                        # 💡 移植した最強ロジックでベースライン集計
-                        for r in rows:
-                            b_num, is_win = get_boat_and_rank(r)
-                            if b_num in venue_baseline:
-                                venue_baseline[b_num]["count"] += 1
-                                if is_win:
-                                    venue_baseline[b_num]["wins"] += 1
-                        
-                        temp = safe_float(first_row.get("気温"))
-                        w_temp = safe_float(first_row.get("水温"))
-                        press = safe_float(first_row.get("気圧"))
-                        humidity = safe_float(first_row.get("湿度"))
-                        wind_speed = safe_int(first_row.get("風速"))
-                        wave = safe_int(first_row.get("波高"))
-                        actual_weather = str(first_row.get("天候", ""))
-                        raw_wind_direction = first_row.get("風向", "")
-
-                        if wind_speed is None: wind_speed = 0
-                        if wave is None: wave = 0
-
-                        times = []
-                        for r in rows:
-                            b, _ = get_boat_and_rank(r)
-                            t = safe_float(r.get("展示"))
-                            if b and t is not None: times.append((b, t))
-                        
-                        fastest_boat = times[0][0] if times else None
-
-                        is_broad_match = True
-                        if "指定なし" not in wind_dir_raw:
-                            translated_dir = get_wind_type(venue, raw_wind_direction)
-                            if "向かい風" in wind_dir_raw and translated_dir != "向かい風": is_broad_match = False
-                            elif "追い風" in wind_dir_raw and translated_dir != "追い風": is_broad_match = False
-                            elif "横風" in wind_dir_raw and translated_dir != "無風/横風": is_broad_match = False
-
-                        if "指定なし" not in exhibit_raw:
-                            target_boat = exhibit_raw.split("号艇")[0]
-                            if fastest_boat != target_boat: is_broad_match = False
-
-                        is_exact_match = is_broad_match
-                        if is_exact_match:
-                            if "指定なし" not in wave_raw:
-                                wave_num_str = wave_raw.split("cm")[0]
-                                if "以上" in wave_raw:
-                                    if wave < float(wave_num_str): is_exact_match = False
-                                else:
-                                    if wave != float(wave_num_str): is_exact_match = False
-                            if "指定なし" not in season_raw:
-                                if temp is None: is_exact_match = False
-                                elif "未満" in season_raw and temp >= 5.0: is_exact_match = False
-                                elif "5〜10度" in season_raw and not (5.0 <= temp < 10.0): is_exact_match = False
-                                elif "10〜15度" in season_raw and not (10.0 <= temp < 15.0): is_exact_match = False
-                                elif "15〜20度" in season_raw and not (15.0 <= temp < 20.0): is_exact_match = False
-                                elif "20〜25度" in season_raw and not (20.0 <= temp < 25.0): is_exact_match = False
-                                elif "25〜30度" in season_raw and not (25.0 <= temp < 30.0): is_exact_match = False
-                                elif "30度以上" in season_raw and temp < 30.0: is_exact_match = False
-                            if "指定なし" not in water_temp_raw:
-                                if w_temp is None: is_exact_match = False
-                                elif "未満" in water_temp_raw and w_temp >= 5.0: is_exact_match = False
-                                elif "5〜10度" in water_temp_raw and not (5.0 <= w_temp < 10.0): is_exact_match = False
-                                elif "10〜15度" in water_temp_raw and not (10.0 <= w_temp < 15.0): is_exact_match = False
-                                elif "15〜20度" in water_temp_raw and not (15.0 <= w_temp < 20.0): is_exact_match = False
-                                elif "20〜25度" in water_temp_raw and not (20.0 <= w_temp < 25.0): is_exact_match = False
-                                elif "25〜30度" in water_temp_raw and not (25.0 <= w_temp < 30.0): is_exact_match = False
-                                elif "30度以上" in water_temp_raw and w_temp < 30.0: is_exact_match = False
-                            if "指定なし" not in weather_raw:
-                                if "晴" in weather_raw and "晴" not in actual_weather: is_exact_match = False
-                                if "曇" in weather_raw and "曇" not in actual_weather: is_exact_match = False
-                                if "雨" in weather_raw and "雨" not in actual_weather: is_exact_match = False
-                                if "雪" in weather_raw and "雪" not in actual_weather: is_exact_match = False
-                            if "指定なし" not in press_raw:
-                                if press is None: is_exact_match = False
-                                elif "1000hPa未満" in press_raw and press >= 1000.0: is_exact_match = False
-                                elif "1000〜1005" in press_raw and not (1000.0 <= press < 1005.0): is_exact_match = False
-                                elif "1005〜1010" in press_raw and not (1005.0 <= press < 1010.0): is_exact_match = False
-                                elif "1010〜1015" in press_raw and not (1010.0 <= press < 1015.0): is_exact_match = False
-                                elif "1015〜1020" in press_raw and not (1015.0 <= press < 1020.0): is_exact_match = False
-                                elif "1020hPa以上" in press_raw and press < 1020.0: is_exact_match = False
-                            if "指定なし" not in humidity_raw:
-                                if humidity is None: is_exact_match = False
-                                elif "30%未満" in humidity_raw and humidity >= 30.0: is_exact_match = False
-                                elif "30〜45%" in humidity_raw and not (30.0 <= humidity < 45.0): is_exact_match = False
-                                elif "45〜60%" in humidity_raw and not (45.0 <= humidity < 60.0): is_exact_match = False
-                                elif "60〜75%" in humidity_raw and not (60.0 <= humidity < 75.0): is_exact_match = False
-                                elif "75%以上" in humidity_raw and humidity < 75.0: is_exact_match = False
-                            if "指定なし" not in wind_spd_raw:
-                                wind_num = wind_spd_raw.split("m")[0]
-                                if "以上" in wind_spd_raw:
-                                    if wind_speed < float(wind_num): is_exact_match = False
-                                else:
-                                    if wind_speed != float(wind_num): is_exact_match = False
-
-                        if is_broad_match: match_counts["broad"] += 1
-                        if is_exact_match: match_counts["exact"] += 1
-
-                        if is_broad_match or is_exact_match:
-                            # 💡 移植した最強ロジックで条件一致集計
-                            for r in rows:
-                                b_num, is_win = get_boat_and_rank(r)
-                                if not b_num: continue
-                                k = str(r.get("決まり手", "不明")).strip()
-                                
-                                if is_broad_match:
-                                    stats_broad[b_num]["count"] += 1
-                                    if is_win:
-                                        stats_broad[b_num]["wins"] += 1
-                                        if k and k != "不明": stats_broad[b_num]["kimarite"][k] += 1
-                                if is_exact_match:
-                                    stats_exact[b_num]["count"] += 1
-                                    if is_win:
-                                        stats_exact[b_num]["wins"] += 1
-                                        if k and k != "不明": stats_exact[b_num]["kimarite"][k] += 1
-
                     for row in reader:
                         total_rows_read += 1
-                        race_id = f"{row.get('日付')}_{row.get('レース場')}_{row.get('レース番号')}"
-                        if current_race_id != race_id:
-                            if race_buffer: analyze_buffered_race(race_buffer)
-                            current_race_id = race_id
-                            race_buffer = []
-                        race_buffer.append(row)
-                    if race_buffer: analyze_buffered_race(race_buffer)
+                        file_v = str(row.get("レース場", "")).replace(" ", "").replace("　", "")
+                        
+                        # 指定したレース場のデータだけをメモリに引き上げる
+                        if file_v == target_venue_clean:
+                            r_id = f"{str(row.get('日付', '')).strip()}_{str(row.get('レース番号', '')).strip()}"
+                            races_in_memory[r_id].append(row)
+
+                # メモリに完璧に展開された「レースごと」の塊を解析する
+                for r_id, rows in races_in_memory.items():
+                    if not rows: continue
+                    first_row = rows[0]
+                    
+                    # 1. ベースライン集計
+                    for r in rows:
+                        b_num, is_win = get_boat_and_rank(r)
+                        if b_num in venue_baseline:
+                            venue_baseline[b_num]["count"] += 1
+                            if is_win:
+                                venue_baseline[b_num]["wins"] += 1
+                    
+                    # 2. 環境データの抽出
+                    temp = safe_float(first_row.get("気温"))
+                    w_temp = safe_float(first_row.get("水温"))
+                    press = safe_float(first_row.get("気圧"))
+                    humidity = safe_float(first_row.get("湿度"))
+                    wind_speed = safe_int(first_row.get("風速"))
+                    wave = safe_int(first_row.get("波高"))
+                    actual_weather = str(first_row.get("天候", ""))
+                    raw_wind_direction = str(first_row.get("風向", ""))
+
+                    if wind_speed is None: wind_speed = 0
+                    if wave is None: wave = 0
+
+                    times = []
+                    for r in rows:
+                        b, _ = get_boat_and_rank(r)
+                        t = safe_float(r.get("展示"))
+                        if b and t is not None: times.append((b, t))
+                    
+                    times.sort(key=lambda x: x[1])
+                    fastest_boat = times[0][0] if times else None
+
+                    # 3. マッチング判定
+                    is_broad_match = True
+                    if "指定なし" not in wind_dir_raw:
+                        translated_dir = get_wind_type(venue, raw_wind_direction)
+                        if "向かい風" in wind_dir_raw and translated_dir != "向かい風": is_broad_match = False
+                        elif "追い風" in wind_dir_raw and translated_dir != "追い風": is_broad_match = False
+                        elif "横風" in wind_dir_raw and translated_dir != "無風/横風": is_broad_match = False
+
+                    if "指定なし" not in exhibit_raw:
+                        target_boat = exhibit_raw.split("号艇")[0]
+                        if fastest_boat != target_boat: is_broad_match = False
+
+                    is_exact_match = is_broad_match
+                    if is_exact_match:
+                        if "指定なし" not in wave_raw:
+                            wave_num_str = wave_raw.split("cm")[0]
+                            if "以上" in wave_raw:
+                                if wave < float(wave_num_str): is_exact_match = False
+                            else:
+                                if wave != float(wave_num_str): is_exact_match = False
+                        if "指定なし" not in season_raw:
+                            if temp is None: is_exact_match = False
+                            elif "未満" in season_raw and temp >= 5.0: is_exact_match = False
+                            elif "5〜10度" in season_raw and not (5.0 <= temp < 10.0): is_exact_match = False
+                            elif "10〜15度" in season_raw and not (10.0 <= temp < 15.0): is_exact_match = False
+                            elif "15〜20度" in season_raw and not (15.0 <= temp < 20.0): is_exact_match = False
+                            elif "20〜25度" in season_raw and not (20.0 <= temp < 25.0): is_exact_match = False
+                            elif "25〜30度" in season_raw and not (25.0 <= temp < 30.0): is_exact_match = False
+                            elif "30度以上" in season_raw and temp < 30.0: is_exact_match = False
+                        if "指定なし" not in water_temp_raw:
+                            if w_temp is None: is_exact_match = False
+                            elif "未満" in water_temp_raw and w_temp >= 5.0: is_exact_match = False
+                            elif "5〜10度" in water_temp_raw and not (5.0 <= w_temp < 10.0): is_exact_match = False
+                            elif "10〜15度" in water_temp_raw and not (10.0 <= w_temp < 15.0): is_exact_match = False
+                            elif "15〜20度" in water_temp_raw and not (15.0 <= w_temp < 20.0): is_exact_match = False
+                            elif "20〜25度" in water_temp_raw and not (20.0 <= w_temp < 25.0): is_exact_match = False
+                            elif "25〜30度" in water_temp_raw and not (25.0 <= w_temp < 30.0): is_exact_match = False
+                            elif "30度以上" in water_temp_raw and w_temp < 30.0: is_exact_match = False
+                        if "指定なし" not in weather_raw:
+                            if "晴" in weather_raw and "晴" not in actual_weather: is_exact_match = False
+                            if "曇" in weather_raw and "曇" not in actual_weather: is_exact_match = False
+                            if "雨" in weather_raw and "雨" not in actual_weather: is_exact_match = False
+                            if "雪" in weather_raw and "雪" not in actual_weather: is_exact_match = False
+                        if "指定なし" not in press_raw:
+                            if press is None: is_exact_match = False
+                            elif "1000hPa未満" in press_raw and press >= 1000.0: is_exact_match = False
+                            elif "1000〜1005" in press_raw and not (1000.0 <= press < 1005.0): is_exact_match = False
+                            elif "1005〜1010" in press_raw and not (1005.0 <= press < 1010.0): is_exact_match = False
+                            elif "1010〜1015" in press_raw and not (1010.0 <= press < 1015.0): is_exact_match = False
+                            elif "1015〜1020" in press_raw and not (1015.0 <= press < 1020.0): is_exact_match = False
+                            elif "1020hPa以上" in press_raw and press < 1020.0: is_exact_match = False
+                        if "指定なし" not in humidity_raw:
+                            if humidity is None: is_exact_match = False
+                            elif "30%未満" in humidity_raw and humidity >= 30.0: is_exact_match = False
+                            elif "30〜45%" in humidity_raw and not (30.0 <= humidity < 45.0): is_exact_match = False
+                            elif "45〜60%" in humidity_raw and not (45.0 <= humidity < 60.0): is_exact_match = False
+                            elif "60〜75%" in humidity_raw and not (60.0 <= humidity < 75.0): is_exact_match = False
+                            elif "75%以上" in humidity_raw and humidity < 75.0: is_exact_match = False
+                        if "指定なし" not in wind_spd_raw:
+                            wind_num = wind_spd_raw.split("m")[0]
+                            if "以上" in wind_spd_raw:
+                                if wind_speed < float(wind_num): is_exact_match = False
+                            else:
+                                if wind_speed != float(wind_num): is_exact_match = False
+
+                    if is_broad_match: match_counts["broad"] += 1
+                    if is_exact_match: match_counts["exact"] += 1
+
+                    if is_broad_match or is_exact_match:
+                        for r in rows:
+                            b_num, is_win = get_boat_and_rank(r)
+                            if not b_num: continue
+                            k = str(r.get("決まり手", "不明")).strip()
+                            
+                            if is_broad_match:
+                                stats_broad[b_num]["count"] += 1
+                                if is_win:
+                                    stats_broad[b_num]["wins"] += 1
+                                    if k and k != "不明": stats_broad[b_num]["kimarite"][k] += 1
+                            if is_exact_match:
+                                stats_exact[b_num]["count"] += 1
+                                if is_win:
+                                    stats_exact[b_num]["wins"] += 1
+                                    if k and k != "不明": stats_exact[b_num]["kimarite"][k] += 1
 
                 final_stats = stats_exact
                 fallback_used = False
@@ -363,25 +365,44 @@ else:
                     try:
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
                         prompt = f"""
-                        あなたは水面の「事実」だけを刻む予測システム【12TUELVUN】のコアAIです。
-                        レース場: {venue}, 時間帯: {ai_time}, 気温: {ai_season}, 水温: {ai_w_temp}, 水質: {ai_w_qual}, 気圧: {ai_press}, 湿度: {ai_humid}, 風向: {wind_dir_raw}, 風速: {ai_wind_spd}, 波高: {ai_wave}, 潮回り: {ai_tide}, 展示トップ: {exhibit_raw}, 頻発する決まり手: {k_str}
-                        冒頭は「今、ひとりでこの分析画面を見つめているあなたなら、もう気づいているはずだ。毎日ただ単純な予想に頼り、思考停止で負け続ける日々はもう終わりにしよう。12TUELVUNは過去10年以上の膨大なデータと物理法則から、プロの環境認識を完全に代行する。」で始めること。
-                        純粋な水面のドラマとして500文字程度で出力。最後は「他人の予想にすがるのは、もう終わりにしよう。スリットを通過するまでの『12秒間』。己の決断だけを信じ、あの絶対領域を支配しろ。プロの視座とあなたの直感が交差した時、究極の一撃が水面を切り裂く。さあ、極限の没入を味わえ。」で締めくくること。
+                        あなたは水面の「事実」だけを刻む独自の予測システム【12TUELVUN】のコアAIです。
+                        レース場: {venue}
+                        時間帯: 【{ai_time}】
+                        気温: 【{ai_season}】
+                        水温: 【{ai_w_temp}】
+                        水質: 【{ai_w_qual}】
+                        気圧: 【{ai_press}】
+                        湿度: 【{ai_humid}】
+                        風向: 【{wind_dir_raw}】
+                        風速: 【{ai_wind_spd}】
+                        波高: 【{ai_wave}】
+                        潮回り: 【{ai_tide}】
+                        展示トップ: {exhibit_raw}
+                        頻発する決まり手: {k_str}
+
+                        1. 冒頭は「今、ひとりでこの分析画面を見つめているあなたなら、もう気づいているはずだ。毎日ただ単純な予想に頼り、思考停止で負け続ける日々はもう終わりにしよう。12TUELVUNは過去10年以上の膨大なデータと物理法則から、プロの環境認識を完全に代行する。」で始めること。
+                        2. 指定された時間帯、水温、水質、気圧、風速、潮回りの数値を必ず文章内で使って解説。
+                        3. お金や賭けの用語は一切使わず、純粋な水面のドラマとして500文字程度で出力。
+                        4. 最後は「他人の予想にすがるのは、もう終わりにしよう。スリットを通過するまでの『12秒間』。己の決断だけを信じ、あの絶対領域を支配しろ。プロの視座とあなたの直感が交差した時、究極の一撃が水面を切り裂く。さあ、極限の没入を味わえ。」で締めくくること。
                         """
                         data = {"contents": [{"parts": [{"text": prompt}]}]}
                         req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
+                        
                         ctx_ai = ssl.create_default_context()
                         ctx_ai.check_hostname = False
                         ctx_ai.verify_mode = ssl.CERT_NONE
+                        
                         with urllib.request.urlopen(req, context=ctx_ai) as response:
                             result = json.loads(response.read().decode('utf-8'))
                             ai_story = result['candidates'][0]['content']['parts'][0]['text']
+                            
                     except urllib.error.HTTPError as e:
-                        ai_story = f"⚠️ 【AI混雑中】Googleのサーバーが混み合っています。5分後に再実行してください。\n[詳細]: {e.read().decode('utf-8')}"
+                        err_body = e.read().decode('utf-8')
+                        ai_story = f"⚠️ 【AI通信エラー】\nGoogleのAIが混み合っているか、拒否されました。\n\n[詳細]:\n{err_body}"
                     except Exception as e:
-                        ai_story = f"⚠️ 【AI通信エラー】\n[詳細]: {str(e)}"
+                        ai_story = f"⚠️ 【AI通信エラー】\n通信に失敗しました。\n\n[詳細]: {str(e)}"
                 else:
-                    ai_story = "⚠️ 【AI待機中】サイドバーからAPIキーを入力してください。"
+                    ai_story = "⚠️ 【AI待機中】\n画面左側のメニュー（スマホの場合は左上の「＞」マーク）から、AI用のAPIキーを入力してください。"
 
             except Exception as e:
                 st.error(f"データ解析中にエラーが発生しました: {str(e)}")
@@ -392,11 +413,11 @@ else:
         st.subheader("👁️‍🗨️ 12TUELVUN: ABSOLUTE DOMAIN")
         
         if total_hits_races == 0:
-            st.warning("⚠️ 【データ未観測領域】 理論値プロファイリングのみを実行します。")
+            st.warning("⚠️ 【データ未観測領域】 過去10年に存在しない極限数値です。理論値プロファイリングのみを実行します。")
         elif fallback_used:
-            st.info(f"⚠️ 【広域データ抽出】 勝敗を分ける核となる【風向・展示】の事実を広域抽出しました。")
+            st.info(f"⚠️ 【広域データ抽出】 完全一致データが少なかったため、勝敗を分ける核となる【風向・展示】の事実を広域抽出しました。")
         if total_rows_read > 0:
-            st.success(f"📊 データベース: 全 {total_rows_read:,} 件スキャン完了 / 類似環境抽出 {total_hits_races:,} レース")
+            st.success(f"📊 データベース: 全 {total_rows_read:,} 件のデータスキャン完了 / 類似環境抽出 {total_hits_races:,} レース")
 
         st.markdown("#### 【🎓 環境プロファイリング（数値解析）】")
         for p_html in profiling_html:
@@ -412,8 +433,10 @@ else:
         for b_num in range(1, 7):
             s = final_stats[str(b_num)]
             win_rate = round(s["wins"] / s["count"] * 100, 1) if s["count"] > 0 else 0.0
+            
             base_s = venue_baseline[str(b_num)]
             base_win_rate = round(base_s["wins"] / base_s["count"] * 100, 1) if base_s["count"] > 0 else 0.0
+            
             diff = round(win_rate - base_win_rate, 1)
             diff_str = f"+{diff}" if diff > 0 else str(diff)
 
@@ -427,10 +450,8 @@ else:
                     k_text = " / ".join([f"{k}({round(c/s['wins']*100)}%)" for k, c in kimarite_sorted])
                     st.caption(f"└─ 特異決まり手: {k_text}")
 
-        # 💡 万が一また0%になった時、一瞬で原因を特定するための「緊急デバッグ」
+        # 💡 万が一またおかしくなった時の緊急デバッグ
         st.markdown("<br><br>", unsafe_allow_html=True)
         with st.expander("🛠️ 【緊急デバッグ】もし勝率がおかしい場合はここをタップしてください"):
-            st.write("▼ 【平常時】の裏側集計データ（※ここがすべて0なら読み込みに失敗しています）")
+            st.write("▼ 【平常時】の裏側集計データ")
             st.json(venue_baseline)
-            st.write("▼ 【条件一致】の裏側集計データ")
-            st.json(final_stats)
