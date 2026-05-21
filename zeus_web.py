@@ -7,6 +7,7 @@ import urllib.error
 import json
 import ssl
 import gdown
+import re  # 💡 強制抽出用の最強ツールを追加
 
 # --- 究極クラウド設定 ---
 DRIVE_FILE_ID = "1tWVFol3GauZdrUIJ_w_OKM9AZSQLbswG"
@@ -41,19 +42,18 @@ def sync_database_from_cloud():
 
 database_ready = sync_database_from_cloud()
 
-# --- 💡 強制データクレンジング関数（「01」→「1」に完全対応！） ---
+# --- 💡 強制データクレンジング関数（「1着」や「①」から数字だけを抜き出す） ---
 def clean_boat_num(val):
     if not val: return None
-    v = str(val).strip().translate(str.maketrans('１２３４５６７８９０', '1234567890'))
-    if v.endswith('.0'): v = v[:-2]
-    v = v.lstrip('0') # 💡 ここで「02」の頭の「0」を削り落として「2」にする！
-    return v if v in ["1", "2", "3", "4", "5", "6"] else None
+    v = str(val).translate(str.maketrans('１２３４５６', '123456'))
+    m = re.search(r'[1-6]', v)
+    return m.group(0) if m else None
 
 def is_winning_rank(val):
     if not val: return False
-    v = str(val).strip().translate(str.maketrans('１２３４５６７８９０', '1234567890'))
-    if v.endswith('.0'): v = v[:-2]
-    return v in ["1", "01"]
+    v = str(val).translate(str.maketrans('１２３４５６７８９０', '1234567890'))
+    m = re.search(r'\d+', v)
+    return (m and int(m.group(0)) == 1)
 
 # --- マスターデータ ---
 VENUE_WATER_MAP = {
@@ -197,8 +197,8 @@ else:
         stats_broad = {str(i): {"count": 0, "wins": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
         venue_baseline = {str(i): {"count": 0, "wins": 0} for i in range(1, 7)}
         
-        matched_races_exact = 0
-        matched_races_broad = 0
+        match_counts = {"exact": 0, "broad": 0}
+        total_rows_read = 0
 
         with st.spinner("🔍 過去10年以上・339万件のデータをスキャン中..."):
             try:
@@ -208,7 +208,6 @@ else:
                     race_buffer = []
 
                     def analyze_buffered_race(rows):
-                        global matched_races_exact, matched_races_broad
                         if not rows or rows[0].get("レース場") != venue: return
                         
                         first_row = rows[0]
@@ -303,10 +302,8 @@ else:
                                 else:
                                     if wind_speed != float(wind_num): is_exact_match = False
 
-                        if is_broad_match:
-                            globals()['matched_races_broad'] += 1
-                        if is_exact_match:
-                            globals()['matched_races_exact'] += 1
+                        if is_broad_match: match_counts["broad"] += 1
+                        if is_exact_match: match_counts["exact"] += 1
 
                         if is_broad_match or is_exact_match:
                             for r in rows:
@@ -327,6 +324,7 @@ else:
                                         if k and k != "不明": stats_exact[b_num]["kimarite"][k] += 1
 
                     for row in reader:
+                        total_rows_read += 1
                         race_id = f"{row.get('日付')}_{row.get('レース場')}_{row.get('レース番号')}"
                         if current_race_id != race_id:
                             if race_buffer: analyze_buffered_race(race_buffer)
@@ -337,13 +335,13 @@ else:
 
                 final_stats = stats_exact
                 fallback_used = False
-                total_hits_races = globals()['matched_races_exact']
+                total_hits_races = match_counts["exact"]
 
                 if total_hits_races < 30:
-                    if globals()['matched_races_broad'] > 0:
+                    if match_counts["broad"] > 0:
                         final_stats = stats_broad
                         fallback_used = True
-                        total_hits_races = globals()['matched_races_broad']
+                        total_hits_races = match_counts["broad"]
 
                 total_wins = 0
                 all_kimarite = defaultdict(int)
@@ -486,8 +484,8 @@ else:
             st.warning("⚠️ 【データ未観測領域】 過去10年に存在しない極限数値です。理論値プロファイリングのみを実行します。")
         elif fallback_used:
             st.info(f"⚠️ 【広域データ抽出】 完全一致データが少なかったため、過去10年以上の全339万レースから、勝敗を分ける核となる【風向・展示】の事実を広域抽出しました。")
-        if total_hits_races > 0:
-            st.success(f"📊 データベース: 過去10年以上・全339万レース以上 / 類似環境抽出 {total_hits_races:,} レース")
+        if total_rows_read > 0:
+            st.success(f"📊 データベース: 全 {total_rows_read:,} 件のデータ読み込み完了 / 類似環境抽出 {total_hits_races:,} レース")
 
         st.markdown("#### 【🎓 環境プロファイリング（数値解析）】")
         for p_html in profiling_html:
