@@ -6,7 +6,7 @@ import urllib.request
 import urllib.error
 import json
 import ssl
-import gdown  # 💡 巨大データ突破用の強力なツール
+import gdown
 
 # --- 究極クラウド設定 ---
 DRIVE_FILE_ID = "1tWVFol3GauZdrUIJ_w_OKM9AZSQLbswG"
@@ -18,19 +18,16 @@ st.set_page_config(page_title="12TUELVUN", page_icon="⚡", layout="centered")
 with st.sidebar:
     st.markdown("### 🔑 システム設定")
     st.markdown("セキュリティ保護のため、AIキーはここに入力してください。")
-    # 💡 コピペ時の「見えない空白」を自動削除する魔法のコードを追加！
     API_KEY = st.text_input("Gemini APIキー", type="password").strip()
 
-# --- 巨大データ自動同期ロジック (gdown安定版) ---
+# --- 巨大データ自動同期ロジック ---
 def sync_database_from_cloud():
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
         return True
         
     with st.spinner("☁️ クラウドの特大データベース（541MB）と同期中...（約1〜3分）"):
         try:
-            # 💡 fuzzyオプションを外し、IDを直接指定する最も安定した方式
             gdown.download(id=DRIVE_FILE_ID, output=CSV_FILE, quiet=False)
-            
             if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
                 return True
             else:
@@ -43,6 +40,19 @@ def sync_database_from_cloud():
             return False
 
 database_ready = sync_database_from_cloud()
+
+# --- 💡 強制データクレンジング関数（どんな汚れたCSVデータも正確に読み取る） ---
+def clean_boat_num(val):
+    if not val: return None
+    v = str(val).strip().translate(str.maketrans('１２３４５６', '123456'))
+    if v.endswith('.0'): v = v[:-2]
+    return v if v in ["1", "2", "3", "4", "5", "6"] else None
+
+def is_winning_rank(val):
+    if not val: return False
+    v = str(val).strip().translate(str.maketrans('１２３４５６７８９０', '1234567890'))
+    if v.endswith('.0'): v = v[:-2]
+    return v in ["1", "01"]
 
 # --- マスターデータ ---
 VENUE_WATER_MAP = {
@@ -134,11 +144,16 @@ def get_wind_type(venue, raw_dir):
     return "無風/横風"
 
 def safe_float(val):
-    try: return float(val)
+    try:
+        clean_str = str(val).strip().translate(str.maketrans('１２３４５６７８９０．', '1234567890.'))
+        return float(clean_str)
     except: return None
 
 def safe_int(val):
-    try: return int(val)
+    try:
+        clean_str = str(val).strip().translate(str.maketrans('１２３４５６７８９０', '1234567890'))
+        if clean_str.endswith('.0'): clean_str = clean_str[:-2]
+        return int(clean_str)
     except: return None
 
 # --- UIレイアウト構築 ---
@@ -177,9 +192,12 @@ if not database_ready:
     st.error("⚠️ データベースの同期が完了するまで、解析は実行できません。")
 else:
     if st.button("⚡ 12TUELVUN 解析を実行", use_container_width=True):
-        stats_exact = {str(i): {"count": 0, "wins": 0, "ret": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
-        stats_broad = {str(i): {"count": 0, "wins": 0, "ret": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
+        stats_exact = {str(i): {"count": 0, "wins": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
+        stats_broad = {str(i): {"count": 0, "wins": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
         venue_baseline = {str(i): {"count": 0, "wins": 0} for i in range(1, 7)}
+        
+        matched_races_exact = 0
+        matched_races_broad = 0
 
         with st.spinner("🔍 過去10年以上・339万件のデータをスキャン中..."):
             try:
@@ -189,13 +207,16 @@ else:
                     race_buffer = []
 
                     def analyze_buffered_race(rows):
+                        global matched_races_exact, matched_races_broad
                         if not rows or rows[0].get("レース場") != venue: return
+                        
                         first_row = rows[0]
+                        # ベースライン集計
                         for r in rows:
-                            b_num = r.get("艇番")
+                            b_num = clean_boat_num(r.get("艇番"))
                             if b_num in venue_baseline:
                                 venue_baseline[b_num]["count"] += 1
-                                if r.get("着順") in ["1", "01", "１", "０１"]:
+                                if is_winning_rank(r.get("着順")):
                                     venue_baseline[b_num]["wins"] += 1
                         
                         temp = safe_float(first_row.get("気温"))
@@ -212,11 +233,11 @@ else:
 
                         times = []
                         for r in rows:
+                            b = clean_boat_num(r.get("艇番"))
                             t = safe_float(r.get("展示"))
-                            if t is not None: times.append((str(r.get("艇番")), t))
-                        if not times: return
-                        times.sort(key=lambda x: x[1])
-                        fastest_boat = times[0][0]
+                            if b and t is not None: times.append((b, t))
+                        
+                        fastest_boat = times[0][0] if times else None
 
                         is_broad_match = True
                         if "指定なし" not in wind_dir_raw:
@@ -282,22 +303,28 @@ else:
                                 else:
                                     if wind_speed != float(wind_num): is_exact_match = False
 
+                        if is_broad_match:
+                            globals()['matched_races_broad'] += 1
+                        if is_exact_match:
+                            globals()['matched_races_exact'] += 1
+
                         if is_broad_match or is_exact_match:
                             for r in rows:
-                                b_num = r.get("艇番")
+                                b_num = clean_boat_num(r.get("艇番"))
                                 if not b_num: continue
-                                is_win = r.get("着順") in ["1", "01", "１", "０１"]
-                                k = r.get("決まり手", "不明")
+                                is_win = is_winning_rank(r.get("着順"))
+                                k = str(r.get("決まり手", "不明")).strip()
+                                
                                 if is_broad_match:
                                     stats_broad[b_num]["count"] += 1
                                     if is_win:
                                         stats_broad[b_num]["wins"] += 1
-                                        if k: stats_broad[b_num]["kimarite"][k] += 1
+                                        if k and k != "不明": stats_broad[b_num]["kimarite"][k] += 1
                                 if is_exact_match:
                                     stats_exact[b_num]["count"] += 1
                                     if is_win:
                                         stats_exact[b_num]["wins"] += 1
-                                        if k: stats_exact[b_num]["kimarite"][k] += 1
+                                        if k and k != "不明": stats_exact[b_num]["kimarite"][k] += 1
 
                     for row in reader:
                         race_id = f"{row.get('日付')}_{row.get('レース場')}_{row.get('レース番号')}"
@@ -310,13 +337,13 @@ else:
 
                 final_stats = stats_exact
                 fallback_used = False
-                if stats_exact["1"]["count"] < 30:
-                    if stats_broad["1"]["count"] > 0:
+                total_hits_races = globals()['matched_races_exact']
+
+                if total_hits_races < 30:
+                    if globals()['matched_races_broad'] > 0:
                         final_stats = stats_broad
                         fallback_used = True
-                
-                total_hits_races = final_stats["1"]["count"]
-                total_venue_races = venue_baseline["1"]["count"]
+                        total_hits_races = globals()['matched_races_broad']
 
                 total_wins = 0
                 all_kimarite = defaultdict(int)
@@ -338,7 +365,6 @@ else:
                 ai_wave = wave_raw.split(' ')[0]
                 ai_tide = tide_raw.split(' ')[0]
 
-                # 環境プロファイリング
                 profiling_html = []
                 def add_prof(title, desc, color="#d1d5db"):
                     profiling_html.append(f"<div style='margin-bottom: 8px;'><strong style='color:#fcd34d;'>{title}</strong><br><span style='color:{color};'>└ {desc}</span></div>")
@@ -350,19 +376,16 @@ else:
                     elif "デイ" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 気温と水温がピークに達し、モーターが最も『ダレる』過酷な時間帯です。スロー勢の出足が甘くなりやすく、波乱の引き金が引かれやすい環境です。")
                     elif "サンセット" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"⚠️ 【{ai_time}の魔境】 強烈な西日が水面に乱反射し、大時計とスリットラインの視認性を極端に奪います。選手のスタート勘が狂い、予期せぬドカ遅れ（凹み）が多発する魔の時間帯です。", "#ef4444")
                     elif "ナイター" in time_raw: add_prof(f"⌚ 時間帯 【{time_raw}】", f"【{ai_time}の特性】 日没とともに気温が急低下。冷えた空気を吸い込むことでモーターの体積効率が限界突破し、出足・行き足が復活します。インの信頼度が増すと同時に、強烈なスピード戦が展開されます。", "#22d3ee")
-                else:
-                    add_prof(f"⌚ 時間帯 【{time_raw}】", "時間帯による条件の絞り込みを行わず、全時間帯を対象に分析しています。")
+                else: add_prof(f"⌚ 時間帯 【{time_raw}】", "時間帯による条件の絞り込みを行わず、全時間帯を対象に分析しています。")
 
                 if "指定なし" not in water_qual_raw:
                     if "海水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 塩分による浮力が大きく、体重の重い選手でも不利になりにくい環境です。水質が柔らかいため、スピードに乗った思い切った全速ターンが決まりやすくなります。")
                     elif "淡水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 浮力が小さいため体重差がモロに出ます。水質が硬く艇が跳ねやすいため、モーターの『乗り心地』や『回り足』の差が露骨に結果を左右するシビアな水面です。")
                     elif "汽水" in water_qual_raw: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", f"【{ai_w_qual}の物理特性】 海水と淡水が混ざり合い、時間帯や潮の満ち引きによって水面の硬さや浮力が変化する、極めて難解でテクニカルな水面です。")
-                else:
-                    add_prof(f"🧪 水質・比重 【{water_qual_raw}】", "水質による条件の絞り込みを行わず、全水質を対象に分析しています。")
+                else: add_prof(f"🧪 水質・比重 【{water_qual_raw}】", "水質による条件の絞り込みを行わず、全水質を対象に分析しています。")
 
                 is_tidal = venue in ["江戸川", "平和島", "浜名湖", "常滑", "鳴門", "丸亀", "児島", "宮島", "徳山", "下関", "若松", "福岡", "大村"]
-                if not is_tidal:
-                    add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", "【影響なし】 このレース場は淡水（プール等）のため、潮の干満による水面への直接的な影響はありません。風や気圧のデータを最優先に展開を構築します。", "#94a3b8")
+                if not is_tidal: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", "【影響なし】 このレース場は淡水（プール等）のため、潮の干満による水面への直接的な影響はありません。風や気圧のデータを最優先に展開を構築します。", "#94a3b8")
                 else:
                     if "指定なし" not in tide_raw:
                         if "満潮" in tide_raw: add_prof(f"🌊 潮回り・潮位 【{tide_raw}】", f"【{ai_tide}の影響】 水位が上がり、うねりや波が発生しやすい不安定な水面になります。ターンがバタつくため全速のまくりが外に流れやすく、インの『逃げ』や内を差す『差し』が圧倒的に有利な条件です。")
@@ -410,7 +433,6 @@ else:
                 ai_story = "【AIドラマ生成中...】"
                 if API_KEY:
                     try:
-                        # 💡 正しい最新モデル「gemini-2.5-flash」に戻しました！
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
                         prompt = f"""
                         あなたは水面の「事実」だけを刻む独自の予測システム【12TUELVUN】のコアAIです。
@@ -445,7 +467,6 @@ else:
                             ai_story = result['candidates'][0]['content']['parts'][0]['text']
                             
                     except urllib.error.HTTPError as e:
-                        # 💡 万が一弾かれた場合、Googleからのエラーメッセージを画面に直接表示する探知機
                         err_body = e.read().decode('utf-8')
                         ai_story = f"⚠️ 【AI通信エラー】\nAPIキーの形式がおかしいか、Google側で拒否されました。\n\n[Googleからの返答]:\n{err_body}"
                     except Exception as e:
@@ -481,9 +502,12 @@ else:
         
         for b_num in range(1, 7):
             s = final_stats[str(b_num)]
-            win_rate = round(s["wins"] / total_hits_races * 100, 1) if total_hits_races > 0 else 0
+            # 💡 欠場等で母数が減るケースを考慮し、レース数ではなく「その艇が出走した数」を正確な分母にする
+            win_rate = round(s["wins"] / s["count"] * 100, 1) if s["count"] > 0 else 0.0
+            
             base_s = venue_baseline[str(b_num)]
-            base_win_rate = round(base_s["wins"] / base_s["count"] * 100, 1) if base_s["count"] > 0 else 0
+            base_win_rate = round(base_s["wins"] / base_s["count"] * 100, 1) if base_s["count"] > 0 else 0.0
+            
             diff = round(win_rate - base_win_rate, 1)
             diff_str = f"+{diff}" if diff > 0 else str(diff)
 
