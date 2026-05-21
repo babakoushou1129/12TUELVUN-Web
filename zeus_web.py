@@ -13,29 +13,28 @@ CSV_FILE = "ZEUS_10Years_Master_FINAL_PERFECT.csv"
 
 st.set_page_config(page_title="12TUELVUN", page_icon="⚡", layout="centered")
 
-# 💡 サイドバーにAIキー入力欄を設置（公開倉庫に書くとGoogleに消されるため）
+# 💡 サイドバーにAIキー入力欄を設置
 with st.sidebar:
     st.markdown("### 🔑 システム設定")
     st.markdown("セキュリティ保護のため、AIキーはここに入力してください。")
     API_KEY = st.text_input("Gemini APIキー", type="password")
 
-# --- 巨大データ自動同期ロジック (gdownでウイルススキャンの壁を突破) ---
+# --- 巨大データ自動同期ロジック (gdown安定版) ---
 def sync_database_from_cloud():
     if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
         return True
         
     with st.spinner("☁️ クラウドの特大データベース（541MB）と同期中...（約1〜3分）"):
         try:
-            file_url = f"https://drive.google.com/uc?id={DRIVE_FILE_ID}"
-            # fuzzy=True でGoogleドライブの警告画面を自動突破！
-            gdown.download(file_url, CSV_FILE, quiet=False, fuzzy=True)
+            # 💡 fuzzyオプションを外し、IDを直接指定する最も安定した方式に変更！
+            gdown.download(id=DRIVE_FILE_ID, output=CSV_FILE, quiet=False)
             
-            if os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
+            if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
                 return True
             else:
                 st.error("❌ ダウンロードが不完全です。再読み込みしてください。")
-                # 失敗したゴミファイルを消す
-                os.remove(CSV_FILE)
+                if os.path.exists(CSV_FILE):
+                    os.remove(CSV_FILE)
                 return False
         except Exception as e:
             st.error(f"❌ クラウドデータの同期に失敗しました。[エラー詳細]: {e}")
