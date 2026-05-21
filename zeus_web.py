@@ -26,7 +26,7 @@ def sync_database_from_cloud():
         
     with st.spinner("☁️ クラウドの特大データベース（541MB）と同期中...（約1〜3分）"):
         try:
-            # 💡 fuzzyオプションを外し、IDを直接指定する最も安定した方式に変更！
+            # 💡 fuzzyオプションを外し、IDを直接指定する最も安定した方式
             gdown.download(id=DRIVE_FILE_ID, output=CSV_FILE, quiet=False)
             
             if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 100 * 1024 * 1024:
@@ -408,7 +408,8 @@ else:
                 ai_story = "【AIドラマ生成中...】"
                 if API_KEY:
                     try:
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
+                        # 💡 ここを gemini-1.5-flash に修正しました！
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
                         prompt = f"""
                         あなたは水面の「事実」だけを刻む独自の予測システム【12TUELVUN】のコアAIです。
                         レース場: {venue}
