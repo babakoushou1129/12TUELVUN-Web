@@ -211,7 +211,6 @@ else:
                         if not rows or rows[0].get("レース場") != venue: return
                         
                         first_row = rows[0]
-                        # ベースライン集計
                         for r in rows:
                             b_num = clean_boat_num(r.get("艇番"))
                             if b_num in venue_baseline:
@@ -502,7 +501,6 @@ else:
         
         for b_num in range(1, 7):
             s = final_stats[str(b_num)]
-            # 💡 欠場等で母数が減るケースを考慮し、レース数ではなく「その艇が出走した数」を正確な分母にする
             win_rate = round(s["wins"] / s["count"] * 100, 1) if s["count"] > 0 else 0.0
             
             base_s = venue_baseline[str(b_num)]
