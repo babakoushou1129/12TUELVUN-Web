@@ -10,12 +10,9 @@ import gdown
 import re
 
 # ==========================================
-# ⚙️ システム中枢設定（完全自動化）
+# ⚙️ システム中枢設定（キー＆ID組み込み済み）
 # ==========================================
-# 浅井さんのマスターデータID
 DRIVE_FILE_ID = "1z2UYWOa_4BymBuOPm0cm9rLAaj2lKgbo"
-
-# 浅井さんのGemini APIキー
 API_KEY = "AIzaSyB2z-FBFYf1gSXzuFnRNcSJuA9lzSB7dLM"
 # ==========================================
 
@@ -140,6 +137,9 @@ if database_ready:
         stats_broad = {str(i): {"count": 0, "wins": 0, "kimarite": defaultdict(int)} for i in range(1, 7)}
         venue_baseline = {str(i): {"count": 0, "wins": 0} for i in range(1, 7)}
         match_counts = {"exact": 0, "broad": 0}
+        
+        # 💡 エラーの原因だったカウンターを復活！
+        total_rows_read = 0 
 
         with st.spinner("🔍 超速スキャン中..."):
             try:
@@ -148,6 +148,7 @@ if database_ready:
                 with open(CSV_FILE, "r", encoding="shift_jis", errors="replace") as f:
                     reader = csv.DictReader(f)
                     for row in reader:
+                        total_rows_read += 1 # 💡 行数をカウントする処理も復活！
                         if row.get("レース場", "") != venue: continue
                         r_id = f"{row.get('日付', '')}_{row.get('レース番号', '')}"
                         races_in_memory[r_id].append(row)
@@ -389,7 +390,7 @@ if database_ready:
                     except Exception as e:
                         ai_story = f"⚠️ 【AI通信エラー】通信に失敗しました。\n[詳細]: {str(e)}"
                 else:
-                    ai_story = "⚠️ 【AI待機中】システム設定のコード内にAPIキーが設定されていません。"
+                    ai_story = "⚠️ 【AI待機中】APIキーが設定されていません。"
 
             except Exception as e:
                 st.error(f"データ解析中にエラーが発生しました: {str(e)}")
