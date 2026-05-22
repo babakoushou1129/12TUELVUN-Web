@@ -7,6 +7,7 @@ import urllib.error
 import json
 import ssl
 import gdown
+import re  # 💡 ←私が書き忘れていた致命的な1行を追加しました！！！
 
 # ==========================================
 # ⚙️ システム中枢設定
@@ -156,10 +157,8 @@ if database_ready:
                 with open(CSV_FILE, "r", encoding=detected_enc, errors="replace") as f:
                     reader = csv.DictReader(f)
                     for row in reader:
-                        # 💡 BOMや余計な空白を完全除去したクリーン辞書を作成
                         clean_r = {str(k).strip('\ufeff').strip(): str(v).strip() for k, v in row.items() if k}
                         
-                        # 💡 センサー1：列名がわからなくても、値の中に「福岡」があれば強引に拾う
                         v_match = False
                         for val in clean_r.values():
                             if venue in str(val):
@@ -169,7 +168,6 @@ if database_ready:
                         
                         venue_rows_count += 1
                         
-                        # 💡 センサー2：日付とレース番号を強引に特定する
                         d_val, r_val = "", ""
                         for k, v in clean_r.items():
                             if "日" in k: d_val = v
